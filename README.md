@@ -207,6 +207,12 @@ vigil readme:generate
 vigil readme:check
 ```
 
+Mutation authority is enforced at the CLI boundary. Commands that write files
+require `--allow-mutation`, except commands explicitly marked `auto_enabled` in
+the command catalog. Today `readme:generate` may run with `--auto` because its
+output is deterministic and idempotent: repeated runs converge on the same
+managed block while preserving human-authored README content.
+
 README freshness can also be represented as a normal config gate:
 
 ```json

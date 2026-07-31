@@ -101,6 +101,7 @@ func main() {
 }
 
 func run(args []string) int {
+	args, authority := extractAuthorityArgs(args)
 	global := flag.NewFlagSet("vigil", flag.ContinueOnError)
 	global.SetOutput(os.Stderr)
 	configPath := global.String("config", "", "config file path")
@@ -117,6 +118,9 @@ func run(args []string) int {
 	}
 	command := rest[0]
 	commandArgs := rest[1:]
+	if requiresMutationAuthority(command, commandArgs) && !authority.Allowed(command) {
+		return mutationAuthorityError(command, authority)
+	}
 	switch command {
 	case "help", "--help", "-h":
 		if len(commandArgs) > 0 {
@@ -140,7 +144,7 @@ func run(args []string) int {
 	case "explain":
 		return explain(commandArgs)
 	case "workflow:local":
-		return workflowLocal(*configPath, commandArgs)
+		return workflowLocal(*configPath, commandArgs, authority.AllowMutation)
 	case "verify":
 		return verify(*configPath, commandArgs)
 	case "hooks:install":
@@ -263,7 +267,7 @@ func printHelp() {
 	fmt.Println("Vigil Core")
 	fmt.Println()
 	fmt.Println("Usage:")
-	fmt.Println("  vigil [--config PATH] <command> [args]")
+	fmt.Println("  vigil [--config PATH] [--allow-mutation|--auto] <command> [args]")
 	fmt.Println()
 	fmt.Println("core")
 	for _, command := range commands {
@@ -276,6 +280,8 @@ type commandInfo struct {
 	Source      string   `json:"source"`
 	Description string   `json:"description"`
 	Access      string   `json:"access,omitempty"`
+	AutoEnabled bool     `json:"auto_enabled,omitempty"`
+	AutoReason  string   `json:"auto_reason,omitempty"`
 	Usage       string   `json:"usage,omitempty"`
 	InstallHint string   `json:"install_hint,omitempty"`
 	Examples    []string `json:"examples,omitempty"`
@@ -290,6 +296,85 @@ type commandManual struct {
 	Examples    []string `json:"examples,omitempty"`
 	InstallHint string   `json:"install_hint,omitempty"`
 	Related     []string `json:"related,omitempty"`
+}
+
+type authorityArgs struct {
+	AllowMutation bool
+	Auto          bool
+}
+
+func extractAuthorityArgs(args []string) ([]string, authorityArgs) {
+	var authority authorityArgs
+	clean := make([]string, 0, len(args))
+	for _, arg := range args {
+		switch arg {
+		case "--allow-mutation":
+			authority.AllowMutation = true
+		case "--auto":
+			authority.Auto = true
+		default:
+			clean = append(clean, arg)
+		}
+	}
+	return clean, authority
+}
+
+func (a authorityArgs) Allowed(command string) bool {
+	if a.AllowMutation {
+		return true
+	}
+	return a.Auto && autoEnabledCommand(command)
+}
+
+func autoEnabledCommand(command string) bool {
+	switch command {
+	case "readme:generate":
+		return true
+	default:
+		return false
+	}
+}
+
+func requiresMutationAuthority(command string, args []string) bool {
+	switch command {
+	case "config:init":
+		return hasFlag(args, "write") || hasFlag(args, "force")
+	case "config:migrate":
+		return hasFlag(args, "write")
+	case "config:repair", "hooks:install", "hooks:pre-commit", "hooks:pre-push":
+		return true
+	case "init:ci", "github:init-ci":
+		return hasFlag(args, "write")
+	case "readme:generate":
+		return !hasFlag(args, "dry-run")
+	case "support:bundle":
+		return !hasFlag(args, "dry-run")
+	default:
+		return false
+	}
+}
+
+func hasFlag(args []string, name string) bool {
+	short := "-" + name
+	long := "--" + name
+	for _, arg := range args {
+		if arg == short || arg == long || strings.HasPrefix(arg, long+"=") {
+			return true
+		}
+	}
+	return false
+}
+
+func mutationAuthorityError(command string, authority authorityArgs) int {
+	fmt.Fprintf(os.Stderr, "%s mutation authority required for %s\n", statusLabel("fail"), command)
+	if autoEnabledCommand(command) {
+		fmt.Fprintf(os.Stderr, "rerun with --auto for deterministic, idempotent repair or --allow-mutation for explicit write authority\n")
+	} else if authority.Auto {
+		fmt.Fprintf(os.Stderr, "--auto is not available for %s; rerun with --allow-mutation after review\n", command)
+	} else {
+		fmt.Fprintf(os.Stderr, "rerun with --allow-mutation after review\n")
+	}
+	return 1
 }
 
 func commandHelp(args []string) int {
@@ -941,6 +1026,12 @@ func activeCommands() []commandInfo {
 			commands = append(commands, commandInfo{Command: command, Source: "extension:" + ext.ID, Description: description, Access: contract.Access, Usage: contract.Usage, InstallHint: contract.InstallHint, Examples: contract.Examples})
 		}
 	}
+	for i := range commands {
+		if autoEnabledCommand(commands[i].Command) {
+			commands[i].AutoEnabled = true
+			commands[i].AutoReason = "deterministic idempotent repair"
+		}
+	}
 	sort.Slice(commands, func(i, j int) bool { return commands[i].Command < commands[j].Command })
 	return commands
 }
@@ -1156,7 +1247,7 @@ type gateResult struct {
 	Output     string `json:"output,omitempty"`
 }
 
-func workflowLocal(configPath string, args []string) int {
+func workflowLocal(configPath string, args []string, allowMutation bool) int {
 	fs := flag.NewFlagSet("workflow:local", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	jsonOut := fs.Bool("json", false, "json output")
@@ -1181,12 +1272,31 @@ func workflowLocal(configPath string, args []string) int {
 	var results []gateResult
 	failures := 0
 	for _, gate := range cfg.Gates {
+		if !gate.ReadOnly && !allowMutation {
+			result := gateResult{Name: gate.Name, Command: gate.Command, Status: "fail", ExitCode: 1, Output: "mutation authority required for mutating gate; rerun workflow:local with --allow-mutation"}
+			results = append(results, result)
+			failures++
+			if !*jsonOut {
+				fmt.Fprintf(os.Stderr, "%s %s: %s\n", statusLabel("fail"), gate.Name, result.Output)
+			}
+			break
+		}
+		before, snapshotOK := gitStatusSnapshot()
 		start := time.Now()
 		out, code := runShell(gate.Command)
 		status := "ok"
 		if code != 0 {
 			status = "fail"
 			failures++
+		}
+		if code == 0 && gate.ReadOnly && snapshotOK {
+			after, afterOK := gitStatusSnapshot()
+			if afterOK && after != before {
+				status = "fail"
+				code = 1
+				failures++
+				out = strings.TrimSpace(out + "\nread-only gate changed tracked git state")
+			}
 		}
 		result := gateResult{Name: gate.Name, Command: gate.Command, Status: status, ExitCode: code, DurationMS: time.Since(start).Milliseconds(), Output: trimOutput(out)}
 		results = append(results, result)
@@ -1258,19 +1368,25 @@ func hooksInstall(args []string) int {
 		return 1
 	}
 	for _, hook := range []string{"pre-commit", "pre-push"} {
-		body := fmt.Sprintf("#!/usr/bin/env sh\nvigil hooks:%s \"$@\"\n", hook)
-		if err := os.WriteFile(filepath.Join(hookDir, hook), []byte(body), 0o755); err != nil {
+		body := fmt.Sprintf("#!/usr/bin/env sh\nvigil --allow-mutation hooks:%s \"$@\"\n", hook)
+		path := filepath.Join(hookDir, hook)
+		if existing, err := os.ReadFile(path); err == nil && string(existing) != body {
+			fmt.Fprintf(os.Stderr, "%s existing hook differs, refusing to overwrite: %s\n", statusLabel("fail"), path)
+			fmt.Fprintln(os.Stderr, "move, back up, or chain the existing hook before rerunning hooks:install")
+			return 1
+		}
+		if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}
-		fmt.Printf("installed %s\n", filepath.Join(hookDir, hook))
+		fmt.Printf("installed %s\n", path)
 	}
 	return 0
 }
 
 func hookRun(configPath, hook string, args []string) int {
 	_ = args
-	return workflowLocal(configPath, nil)
+	return workflowLocal(configPath, nil, true)
 }
 
 func checkStagedSensitive(args []string) int {
@@ -1520,15 +1636,29 @@ func githubWorkflow(cfg config) string {
 	b.WriteString("name: Vigil\n\n")
 	b.WriteString("on:\n  pull_request:\n  push:\n    branches: [main]\n\n")
 	b.WriteString("jobs:\n  vigil:\n    runs-on: ubuntu-latest\n    steps:\n")
-	b.WriteString("      - uses: actions/checkout@v4\n")
-	b.WriteString("      - uses: actions/setup-go@v5\n        with:\n          go-version: 'stable'\n")
-	b.WriteString("      - name: Install Vigil\n        run: go install github.com/PayCal-Technologies/vigil-core/cmd/vigil@latest\n")
+	b.WriteString("      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4\n")
+	b.WriteString("      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5\n        with:\n          go-version: '" + goVersionForWorkflow() + "'\n")
+	b.WriteString("      - name: Build Vigil\n        run: |\n          mkdir -p bin\n          go build -o bin/vigil ./cmd/vigil\n          echo \"$PWD/bin\" >> \"$GITHUB_PATH\"\n")
 	b.WriteString("      - name: Verify Vigil\n        run: vigil verify --json\n")
 	for _, gate := range cfg.Gates {
 		b.WriteString("      - name: " + yamlScalar(gate.Name) + "\n")
 		b.WriteString("        run: " + yamlScalar(gate.Command) + "\n")
 	}
 	return b.String()
+}
+
+func goVersionForWorkflow() string {
+	data, err := os.ReadFile("go.mod")
+	if err != nil {
+		return "1.26.0"
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 2 && fields[0] == "go" {
+			return fields[1]
+		}
+	}
+	return "1.26.0"
 }
 
 func yamlScalar(value string) string {
@@ -2621,6 +2751,17 @@ func gitRoot() string {
 		return ""
 	}
 	return strings.TrimSpace(out)
+}
+
+func gitStatusSnapshot() (string, bool) {
+	if gitRoot() == "" {
+		return "", false
+	}
+	out, code := runCommand("git", "status", "--porcelain")
+	if code != 0 {
+		return "", false
+	}
+	return out, true
 }
 
 func gitLines(args ...string) []string {

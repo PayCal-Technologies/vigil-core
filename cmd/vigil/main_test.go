@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -72,6 +74,80 @@ func TestGithubWorkflowIncludesConfiguredGates(t *testing.T) {
 	out := githubWorkflow(cfg)
 	if !strings.Contains(out, "vigil verify --json") || !strings.Contains(out, "git status --short") {
 		t.Fatalf("workflow missing expected commands:\n%s", out)
+	}
+	for _, disallowed := range []string{"actions/checkout@v4", "actions/setup-go@v5", "@latest", "go-version: 'stable'", "go-version: stable"} {
+		if strings.Contains(out, disallowed) {
+			t.Fatalf("workflow contains unpinned value %q:\n%s", disallowed, out)
+		}
+	}
+	for _, want := range []string{
+		"actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+		"actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff",
+		"go build -o bin/vigil ./cmd/vigil",
+		"go-version: '1.26.0'",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("workflow missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestMutationAuthorityPolicy(t *testing.T) {
+	if !requiresMutationAuthority("readme:generate", nil) {
+		t.Fatal("readme:generate should require mutation authority")
+	}
+	if requiresMutationAuthority("readme:generate", []string{"--dry-run"}) {
+		t.Fatal("readme:generate --dry-run should not require mutation authority")
+	}
+	if !(authorityArgs{Auto: true}).Allowed("readme:generate") {
+		t.Fatal("--auto should allow deterministic README generation")
+	}
+	if (authorityArgs{Auto: true}).Allowed("config:repair") {
+		t.Fatal("--auto should not allow broad mutating repair")
+	}
+	if !(authorityArgs{AllowMutation: true}).Allowed("config:repair") {
+		t.Fatal("--allow-mutation should allow explicit mutating repair")
+	}
+}
+
+func TestActiveCommandsMarksReadmeGenerateAutoEnabled(t *testing.T) {
+	for _, command := range activeCommands() {
+		if command.Command == "readme:generate" {
+			if !command.AutoEnabled || command.AutoReason == "" {
+				t.Fatalf("readme:generate missing auto metadata: %#v", command)
+			}
+			return
+		}
+	}
+	t.Fatal("readme:generate missing")
+}
+
+func TestHooksInstallRefusesExistingHookOverwrite(t *testing.T) {
+	temp := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+	if err := os.Chdir(temp); err != nil {
+		t.Fatal(err)
+	}
+	if out, code := runCommand("git", "init"); code != 0 {
+		t.Fatalf("git init failed: %s", out)
+	}
+	hookPath := filepath.Join(temp, ".git", "hooks", "pre-commit")
+	if err := os.WriteFile(hookPath, []byte("#!/usr/bin/env sh\necho existing\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if code := hooksInstall(nil); code == 0 {
+		t.Fatal("hooksInstall should refuse to overwrite an existing differing hook")
+	}
+	data, err := os.ReadFile(hookPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "#!/usr/bin/env sh\necho existing\n" {
+		t.Fatalf("existing hook was modified:\n%s", data)
 	}
 }
 
