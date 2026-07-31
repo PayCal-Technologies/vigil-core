@@ -203,20 +203,20 @@ func TestGithubWorkflowUsesVigilOwnedGoVersion(t *testing.T) {
 	}
 }
 
-func TestMutationAuthorityPolicy(t *testing.T) {
-	if !requiresMutationAuthority("readme:generate", nil) {
-		t.Fatal("readme:generate should require mutation authority")
+func TestMutationConfirmationPolicy(t *testing.T) {
+	if !requiresMutationConfirmation("readme:generate", nil) {
+		t.Fatal("readme:generate should require mutation confirmation")
 	}
-	if requiresMutationAuthority("readme:generate", []string{"--dry-run"}) {
-		t.Fatal("readme:generate --dry-run should not require mutation authority")
+	if requiresMutationConfirmation("readme:generate", []string{"--dry-run"}) {
+		t.Fatal("readme:generate --dry-run should not require mutation confirmation")
 	}
-	if !(authorityArgs{Auto: true}).Allowed("readme:generate") {
+	if !(confirmationArgs{Auto: true}).Allowed("readme:generate") {
 		t.Fatal("--auto should allow deterministic README generation")
 	}
-	if (authorityArgs{Auto: true}).Allowed("config:repair") {
+	if (confirmationArgs{Auto: true}).Allowed("config:repair") {
 		t.Fatal("--auto should not allow broad mutating repair")
 	}
-	if !(authorityArgs{AllowMutation: true}).Allowed("config:repair") {
+	if !(confirmationArgs{AllowMutation: true}).Allowed("config:repair") {
 		t.Fatal("--allow-mutation should allow explicit mutating repair")
 	}
 }
@@ -232,7 +232,7 @@ func TestMutationRequirementsFailClosed(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := templateConfig("generic")
-	cfg.Authority.MutationRequires = []string{"explicit-confirmation", "unknown-policy"}
+	cfg.Coordination.MutationRequires = []string{"explicit-confirmation", "unknown-policy"}
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		t.Fatal(err)
@@ -240,7 +240,7 @@ func TestMutationRequirementsFailClosed(t *testing.T) {
 	if err := os.WriteFile(defaultConfigName, append(data, '\n'), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if mutationRequirementsSatisfied("", "readme:generate", authorityArgs{Auto: true}) {
+	if mutationRequirementsSatisfied("", "readme:generate", confirmationArgs{Auto: true}) {
 		t.Fatal("unknown mutation requirement should fail closed")
 	}
 }
@@ -259,7 +259,7 @@ func TestMutationRequirementsCleanTree(t *testing.T) {
 		t.Fatalf("git init failed: %s", out)
 	}
 	cfg := templateConfig("generic")
-	cfg.Authority.MutationRequires = []string{"explicit-confirmation", "clean-config", "clean-tree"}
+	cfg.Coordination.MutationRequires = []string{"explicit-confirmation", "clean-config", "clean-tree"}
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		t.Fatal(err)
@@ -273,28 +273,28 @@ func TestMutationRequirementsCleanTree(t *testing.T) {
 	if out, code := runCommand("git", "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "config"); code != 0 {
 		t.Fatalf("git commit failed: %s", out)
 	}
-	if !mutationRequirementsSatisfied("", "readme:generate", authorityArgs{Auto: true}) {
+	if !mutationRequirementsSatisfied("", "readme:generate", confirmationArgs{Auto: true}) {
 		t.Fatal("clean tree should satisfy clean-tree")
 	}
 	if err := os.WriteFile("dirty.txt", []byte("dirty\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if mutationRequirementsSatisfied("", "readme:generate", authorityArgs{Auto: true}) {
+	if mutationRequirementsSatisfied("", "readme:generate", confirmationArgs{Auto: true}) {
 		t.Fatal("dirty tree should fail clean-tree")
 	}
 }
 
-func TestExtensionCommandAccessRequiresMutationAuthority(t *testing.T) {
-	if !requiresMutationAuthority("github:init-ci", []string{"--write"}) {
-		t.Fatal("github:init-ci --write should require mutation authority from explicit command handling")
+func TestExtensionCommandAccessRequiresMutationConfirmation(t *testing.T) {
+	if !requiresMutationConfirmation("github:init-ci", []string{"--write"}) {
+		t.Fatal("github:init-ci --write should require mutation confirmation from explicit command handling")
 	}
-	if requiresMutationAuthority("github:init-ci", nil) {
+	if requiresMutationConfirmation("github:init-ci", nil) {
 		t.Fatal("github:init-ci without --write should be preview-safe")
 	}
-	if !requiresMutationAuthority("readme:generate", nil) {
-		t.Fatal("readme:generate should require mutation authority from extension contract")
+	if !requiresMutationConfirmation("readme:generate", nil) {
+		t.Fatal("readme:generate should require mutation confirmation from extension contract")
 	}
-	if requiresMutationAuthority("readme:check", nil) {
+	if requiresMutationConfirmation("readme:check", nil) {
 		t.Fatal("readme:check should remain read-only")
 	}
 }
@@ -335,14 +335,14 @@ func TestGenericConditionalExtensionRequiresMutationOnlyForWriteFlags(t *testing
 	if report := loadExtensions(extensionRoot()); report.Status != "ok" {
 		t.Fatalf("extension report status = %q issues=%#v", report.Status, report.Issues)
 	}
-	if requiresMutationAuthority("conditional:preview", nil) {
-		t.Fatal("conditional extension preview should not require mutation authority")
+	if requiresMutationConfirmation("conditional:preview", nil) {
+		t.Fatal("conditional extension preview should not require mutation confirmation")
 	}
-	if !requiresMutationAuthority("conditional:preview", []string{"--write"}) {
-		t.Fatal("conditional extension --write should require mutation authority")
+	if !requiresMutationConfirmation("conditional:preview", []string{"--write"}) {
+		t.Fatal("conditional extension --write should require mutation confirmation")
 	}
-	if !requiresMutationAuthority("conditional:preview", []string{"--execute=true"}) {
-		t.Fatal("conditional extension --execute=true should require mutation authority")
+	if !requiresMutationConfirmation("conditional:preview", []string{"--execute=true"}) {
+		t.Fatal("conditional extension --execute=true should require mutation confirmation")
 	}
 }
 
@@ -418,7 +418,7 @@ func TestHooksInstallRefusesExistingHookOverwrite(t *testing.T) {
 	}
 }
 
-func TestHooksInstallDoesNotGrantBroadMutationAuthority(t *testing.T) {
+func TestHooksInstallDoesNotGrantBroadMutationConfirmation(t *testing.T) {
 	temp := t.TempDir()
 	oldWd, err := os.Getwd()
 	if err != nil {
@@ -439,7 +439,7 @@ func TestHooksInstallDoesNotGrantBroadMutationAuthority(t *testing.T) {
 		t.Fatal(err)
 	}
 	if strings.Contains(string(prePush), "--allow-mutation") {
-		t.Fatalf("installed hook should not grant broad mutation authority:\n%s", prePush)
+		t.Fatalf("installed hook should not grant broad mutation confirmation:\n%s", prePush)
 	}
 }
 
@@ -582,7 +582,7 @@ func TestValidateConfigIssuesExplainsMissingFields(t *testing.T) {
 			t.Fatalf("issue missing code or message: %#v", issue)
 		}
 	}
-	for _, want := range []string{"schema_version", "profile", "project", "authority.mutation_requires", "gates"} {
+	for _, want := range []string{"schema_version", "profile", "project", "coordination.mutation_requires", "gates"} {
 		if !fields[want] {
 			t.Fatalf("expected issue for %s, got %#v", want, issues)
 		}

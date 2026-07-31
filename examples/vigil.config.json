@@ -2,8 +2,13 @@
   "schema_version": "1",
   "profile": "go-tool",
   "project": "example-vigil-project",
-  "authority": {
-    "local_first": true,
+  "coordination": {
+    "mode": "github-adjacent-helper",
+    "authoritative_surfaces": [
+      "GitHub",
+      "reviewed repository configuration",
+      "active workflow files"
+    ],
     "mutation_requires": [
       "explicit-confirmation",
       "clean-config"

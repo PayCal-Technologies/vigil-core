@@ -28,19 +28,20 @@ const (
 var promptReader = bufio.NewReader(os.Stdin)
 
 type config struct {
-	SchemaVersion            string            `json:"schema_version"`
-	Profile                  string            `json:"profile"`
-	Project                  string            `json:"project"`
-	Authority                authorityConfig   `json:"authority"`
-	Gates                    []gateConfig      `json:"gates"`
-	Extensions               extensionsConfig  `json:"extensions"`
-	PublicAssumptionPatterns []string          `json:"public_assumption_patterns,omitempty"`
-	Metadata                 map[string]string `json:"metadata,omitempty"`
+	SchemaVersion            string             `json:"schema_version"`
+	Profile                  string             `json:"profile"`
+	Project                  string             `json:"project"`
+	Coordination             coordinationConfig `json:"coordination"`
+	Gates                    []gateConfig       `json:"gates"`
+	Extensions               extensionsConfig   `json:"extensions"`
+	PublicAssumptionPatterns []string           `json:"public_assumption_patterns,omitempty"`
+	Metadata                 map[string]string  `json:"metadata,omitempty"`
 }
 
-type authorityConfig struct {
-	LocalFirst       bool     `json:"local_first"`
-	MutationRequires []string `json:"mutation_requires"`
+type coordinationConfig struct {
+	Mode                  string   `json:"mode"`
+	AuthoritativeSurfaces []string `json:"authoritative_surfaces"`
+	MutationRequires      []string `json:"mutation_requires"`
 }
 
 type gateConfig struct {
@@ -105,7 +106,7 @@ func main() {
 }
 
 func run(args []string) int {
-	args, authority := extractAuthorityArgs(args)
+	args, confirmation := extractConfirmationArgs(args)
 	global := flag.NewFlagSet("vigil", flag.ContinueOnError)
 	global.SetOutput(os.Stderr)
 	configPath := global.String("config", "", "config file path")
@@ -122,11 +123,11 @@ func run(args []string) int {
 	}
 	command := rest[0]
 	commandArgs := rest[1:]
-	requiresMutation := requiresMutationAuthority(command, commandArgs)
-	if requiresMutation && !authority.Allowed(command) {
-		return mutationAuthorityError(command, authority)
+	requiresMutation := requiresMutationConfirmation(command, commandArgs)
+	if requiresMutation && !confirmation.Allowed(command) {
+		return mutationConfirmationError(command, confirmation)
 	}
-	if requiresMutation && !mutationRequirementsSatisfied(*configPath, command, authority) {
+	if requiresMutation && !mutationRequirementsSatisfied(*configPath, command, confirmation) {
 		return 1
 	}
 	switch command {
@@ -152,7 +153,7 @@ func run(args []string) int {
 	case "explain":
 		return explain(commandArgs)
 	case "workflow:local":
-		return workflowLocal(*configPath, commandArgs, authority.AllowMutation)
+		return workflowLocal(*configPath, commandArgs, confirmation.AllowMutation)
 	case "verify":
 		return verify(*configPath, commandArgs)
 	case "hooks:install":
@@ -307,28 +308,28 @@ type commandManual struct {
 	Related     []string `json:"related,omitempty"`
 }
 
-type authorityArgs struct {
+type confirmationArgs struct {
 	AllowMutation bool
 	Auto          bool
 }
 
-func extractAuthorityArgs(args []string) ([]string, authorityArgs) {
-	var authority authorityArgs
+func extractConfirmationArgs(args []string) ([]string, confirmationArgs) {
+	var confirmation confirmationArgs
 	clean := make([]string, 0, len(args))
 	for _, arg := range args {
 		switch arg {
 		case "--allow-mutation":
-			authority.AllowMutation = true
+			confirmation.AllowMutation = true
 		case "--auto":
-			authority.Auto = true
+			confirmation.Auto = true
 		default:
 			clean = append(clean, arg)
 		}
 	}
-	return clean, authority
+	return clean, confirmation
 }
 
-func (a authorityArgs) Allowed(command string) bool {
+func (a confirmationArgs) Allowed(command string) bool {
 	if a.AllowMutation {
 		return true
 	}
@@ -344,7 +345,7 @@ func autoEnabledCommand(command string) bool {
 	}
 }
 
-func requiresMutationAuthority(command string, args []string) bool {
+func requiresMutationConfirmation(command string, args []string) bool {
 	switch command {
 	case "config:init":
 		return hasFlag(args, "write") || hasFlag(args, "force")
@@ -402,7 +403,7 @@ func extensionCommandContractFor(command string) (extensionCommandContract, bool
 	return extensionCommandContract{}, false
 }
 
-func mutationRequirementsSatisfied(configPath string, command string, authority authorityArgs) bool {
+func mutationRequirementsSatisfied(configPath string, command string, confirmation confirmationArgs) bool {
 	switch command {
 	case "config:init", "config:repair", "config:migrate":
 		return true
@@ -412,14 +413,14 @@ func mutationRequirementsSatisfied(configPath string, command string, authority 
 		fmt.Fprintf(os.Stderr, "%s clean-config required before mutation: %s: %v\n", statusLabel("fail"), path, err)
 		return false
 	}
-	requirements := cfg.Authority.MutationRequires
+	requirements := cfg.Coordination.MutationRequires
 	if len(requirements) == 0 {
 		requirements = []string{"explicit-confirmation", "clean-config"}
 	}
 	for _, requirement := range requirements {
 		switch strings.TrimSpace(requirement) {
 		case "", "explicit-confirmation":
-			if !authority.AllowMutation && !authority.Auto {
+			if !confirmation.AllowMutation && !confirmation.Auto {
 				fmt.Fprintf(os.Stderr, "%s explicit-confirmation required before mutation\n", statusLabel("fail"))
 				return false
 			}
@@ -452,11 +453,11 @@ func hasFlag(args []string, name string) bool {
 	return false
 }
 
-func mutationAuthorityError(command string, authority authorityArgs) int {
-	fmt.Fprintf(os.Stderr, "%s mutation authority required for %s\n", statusLabel("fail"), command)
+func mutationConfirmationError(command string, confirmation confirmationArgs) int {
+	fmt.Fprintf(os.Stderr, "%s mutation confirmation required for %s\n", statusLabel("fail"), command)
 	if autoEnabledCommand(command) {
-		fmt.Fprintf(os.Stderr, "rerun with --auto for deterministic, idempotent repair or --allow-mutation for explicit write authority\n")
-	} else if authority.Auto {
+		fmt.Fprintf(os.Stderr, "rerun with --auto for deterministic, idempotent repair or --allow-mutation for explicit write confirmation\n")
+	} else if confirmation.Auto {
 		fmt.Fprintf(os.Stderr, "--auto is not available for %s; rerun with --allow-mutation after review\n", command)
 	} else {
 		fmt.Fprintf(os.Stderr, "rerun with --allow-mutation after review\n")
@@ -540,8 +541,8 @@ func printConfigSchema(args []string) int {
 	schema := map[string]any{
 		"schema_version": configSchemaVersion,
 		"format":         "json",
-		"required":       []string{"schema_version", "profile", "project", "authority", "gates", "extensions"},
-		"profiles":       []string{"generic", "go-tool", "static-site"},
+		"required":       []string{"schema_version", "profile", "project", "coordination", "gates", "extensions"},
+		"profiles":       []string{"generic", "go-tool", "static-site", "js-app", "php-app", "native-app", "mixed", "custom"},
 		"extension_manifest": map[string]any{
 			"required": []string{"schema_version", "id", "name", "kind", "status", "private", "public_core", "description", "source_root", "packages", "commands"},
 			"optional": []string{"command_contracts"},
@@ -552,7 +553,7 @@ func printConfigSchema(args []string) int {
 	}
 	fmt.Println("Vigil config format: JSON")
 	fmt.Println("Schema version: 1")
-	fmt.Println("Required: schema_version, profile, project, authority, gates, extensions")
+	fmt.Println("Required: schema_version, profile, project, coordination, gates, extensions")
 	return 0
 }
 
@@ -960,9 +961,12 @@ func promptConfigRepair(cfg config, profile string) config {
 	if strings.TrimSpace(cfg.Project) == "" {
 		cfg.Project = promptString("project", defaults.Project)
 	}
-	if len(cfg.Authority.MutationRequires) == 0 {
-		cfg.Authority.LocalFirst = promptBool("authority.local_first", true)
-		cfg.Authority.MutationRequires = splitCSV(promptString("authority.mutation_requires", strings.Join(defaults.Authority.MutationRequires, ",")))
+	if len(cfg.Coordination.MutationRequires) == 0 {
+		cfg.Coordination.Mode = promptString("coordination.mode", defaults.Coordination.Mode)
+		if len(cfg.Coordination.AuthoritativeSurfaces) == 0 {
+			cfg.Coordination.AuthoritativeSurfaces = defaults.Coordination.AuthoritativeSurfaces
+		}
+		cfg.Coordination.MutationRequires = splitCSV(promptString("coordination.mutation_requires", strings.Join(defaults.Coordination.MutationRequires, ",")))
 	}
 	if len(cfg.Gates) == 0 {
 		if promptBool("Add a default read-only gate?", true) {
@@ -1002,8 +1006,8 @@ func applyConfigDefaults(cfg config, profile string) config {
 	if strings.TrimSpace(cfg.Project) == "" {
 		cfg.Project = defaults.Project
 	}
-	if len(cfg.Authority.MutationRequires) == 0 {
-		cfg.Authority = defaults.Authority
+	if len(cfg.Coordination.MutationRequires) == 0 {
+		cfg.Coordination = defaults.Coordination
 	}
 	if len(cfg.Gates) == 0 {
 		cfg.Gates = defaults.Gates
@@ -1077,18 +1081,18 @@ func activeCommands() []commandInfo {
 		{Command: "config:template", Source: "core", Description: "Print a versioned starter config for a selected profile."},
 		{Command: "completion", Source: "core", Description: "Generate shell completion for bash, zsh, or fish."},
 		{Command: "deps:inventory", Source: "core", Description: "Inventory common dependency manifests and lockfiles."},
-		{Command: "doctor", Source: "core", Description: "Check local readiness for using Vigil Core in CI/CD workflows."},
+		{Command: "doctor", Source: "core", Description: "Check local readiness for using Vigil Core as a GitHub-adjacent helper."},
 		{Command: "explain", Source: "core", Description: "Explain a command's source, access, and usage."},
 		{Command: "extensions:list", Source: "core", Description: "List loaded extension manifests."},
 		{Command: "extensions:doctor", Source: "core", Description: "Validate loaded extension manifests."},
 		{Command: "guards:summary", Source: "core", Description: "Summarize read-only and mutating command coverage."},
 		{Command: "hooks:install", Source: "core", Description: "Install Vigil git hook shims into the current repository."},
-		{Command: "hooks:pre-commit", Source: "core", Description: "Run pre-commit gates from Vigil config."},
-		{Command: "hooks:pre-push", Source: "core", Description: "Run pre-push gates from Vigil config."},
-		{Command: "init:ci", Source: "core", Description: "Generate CI workflow examples from loaded Vigil gates."},
+		{Command: "hooks:pre-commit", Source: "core", Description: "Run pre-commit checks from Vigil config."},
+		{Command: "hooks:pre-push", Source: "core", Description: "Run pre-push checks from Vigil config."},
+		{Command: "init:ci", Source: "core", Description: "Generate GitHub Actions helper workflows from loaded Vigil checks."},
 		{Command: "list", Source: "core", Description: "List core and loaded extension commands."},
 		{Command: "next", Source: "core", Description: "Prioritize next local setup and verification actions."},
-		{Command: "plan", Source: "core", Description: "Explain which configured gates Vigil would run."},
+		{Command: "plan", Source: "core", Description: "Explain which configured local checks Vigil would run."},
 		{Command: "resources:catalog", Source: "core", Description: "List public local diagnostic resources."},
 		{Command: "self-heal:plan", Source: "core", Description: "Suggest safe repairs for local configuration and setup."},
 		{Command: "settings:show", Source: "core", Description: "Alias for config:report."},
@@ -1097,7 +1101,7 @@ func activeCommands() []commandInfo {
 		{Command: "tools:catalog", Source: "core", Description: "List public tools and command contracts."},
 		{Command: "verify", Source: "core", Description: "Run the public readiness proof set."},
 		{Command: "version", Source: "core", Description: "Print Vigil Core version metadata."},
-		{Command: "workflow:local", Source: "core", Description: "Run configured local CI/CD gates with optional dry-run."},
+		{Command: "workflow:local", Source: "core", Description: "Preview or run configured local preflight checks."},
 	}
 	for _, ext := range loadExtensions(extensionRoot()).Extensions {
 		contracts := map[string]extensionCommandContract{}
@@ -1159,7 +1163,7 @@ func extensionCommandDescription(command, fallback string) string {
 		"composer:validate":          "Run Composer manifest validation.",
 		"deploy:verify":              "Verify a configured public endpoint.",
 		"deps:why":                   "Find package references in known manifests.",
-		"github:init-ci":             "Generate GitHub CI workflow from Vigil gates.",
+		"github:init-ci":             "Generate GitHub Actions helper workflow from Vigil checks.",
 		"history:diagnose":           "Alias for repo:health.",
 		"javascript:quality":         "Run public JavaScript quality adapters.",
 		"npm:audit":                  "Run npm audit.",
@@ -1391,8 +1395,8 @@ func workflowLocal(configPath string, args []string, allowMutation bool) int {
 	fs := flag.NewFlagSet("workflow:local", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	jsonOut := fs.Bool("json", false, "json output")
-	dryRun := fs.Bool("dry-run", false, "show gates without running")
-	tagFilter := fs.String("tag", "", "run gates matching tag")
+	dryRun := fs.Bool("dry-run", false, "show checks without running")
+	tagFilter := fs.String("tag", "", "run checks matching tag")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -1415,7 +1419,7 @@ func workflowLocal(configPath string, args []string, allowMutation bool) int {
 	failures := 0
 	for _, gate := range gates {
 		if !gate.ReadOnly && !allowMutation {
-			result := gateResult{Name: gate.Name, Command: gate.Command, Status: "fail", ExitCode: 1, Output: "mutation authority required for mutating gate; rerun workflow:local with --allow-mutation"}
+			result := gateResult{Name: gate.Name, Command: gate.Command, Status: "fail", ExitCode: 1, Output: "mutation confirmation required for mutating check; rerun workflow:local with --allow-mutation"}
 			results = append(results, result)
 			failures++
 			if !*jsonOut {
@@ -1455,7 +1459,7 @@ func workflowLocal(configPath string, args []string, allowMutation bool) int {
 					failures++
 				}
 				code = 1
-				out = strings.TrimSpace(out + "\nread-only gate changed git workspace fingerprint")
+				out = strings.TrimSpace(out + "\nread-only check changed git workspace fingerprint")
 			}
 		}
 		result := gateResult{Name: gate.Name, Command: gate.Command, Status: status, ExitCode: code, DurationMS: time.Since(start).Milliseconds(), Output: trimOutput(out)}
@@ -1812,7 +1816,7 @@ func githubWorkflow(cfg config) string {
 	b.WriteString("      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6\n        with:\n          go-version: '" + goVersionForWorkflow() + "'\n          cache: false\n")
 	b.WriteString("      - name: Install Vigil\n        run: |\n          mkdir -p bin\n          GOBIN=\"$PWD/bin\" go install " + vigilCoreModulePath + "@" + vigilCoreInstallRef() + "\n          echo \"$PWD/bin\" >> \"$GITHUB_PATH\"\n")
 	b.WriteString("      - name: Verify Vigil\n        run: vigil verify --json\n")
-	b.WriteString("      - name: Run Vigil Gates\n        run: vigil workflow:local --json\n")
+	b.WriteString("      - name: Run Vigil Preflight\n        run: vigil workflow:local --json\n")
 	return b.String()
 }
 
@@ -2790,9 +2794,10 @@ func templateConfig(profile string) config {
 		SchemaVersion: configSchemaVersion,
 		Profile:       profile,
 		Project:       filepath.Base(mustGetwd()),
-		Authority: authorityConfig{
-			LocalFirst:       true,
-			MutationRequires: []string{"explicit-confirmation", "clean-config"},
+		Coordination: coordinationConfig{
+			Mode:                  "github-adjacent-helper",
+			AuthoritativeSurfaces: []string{"GitHub", "reviewed repository configuration", "active workflow files"},
+			MutationRequires:      []string{"explicit-confirmation", "clean-config"},
 		},
 		Gates: []gateConfig{
 			{Name: "go test", Command: "go test ./...", ReadOnly: true, Tags: []string{"test", "pre-push"}},
@@ -2810,7 +2815,17 @@ func templateConfig(profile string) config {
 	case "go-tool":
 		cfg.Gates = []gateConfig{{Name: "go test", Command: "go test ./...", ReadOnly: true, Tags: []string{"test", "pre-push"}}, {Name: "go build", Command: "go build ./...", ReadOnly: true, Tags: []string{"build", "pre-push"}}}
 	case "static-site":
-		cfg.Gates = []gateConfig{{Name: "html/php lint", Command: "php -l index.php", ReadOnly: true, Tags: []string{"lint", "pre-commit"}}}
+		cfg.Gates = []gateConfig{{Name: "workspace hygiene", Command: "vigil checks:workspace-hygiene", ReadOnly: true, Tags: []string{"diagnostic", "pre-commit"}}}
+	case "js-app":
+		cfg.Gates = []gateConfig{{Name: "npm test", Command: "npm test", ReadOnly: true, Tags: []string{"test", "pre-push"}}}
+	case "php-app":
+		cfg.Gates = []gateConfig{{Name: "php lint", Command: "find . -name '*.php' -print0 | xargs -0 -n1 php -l", ReadOnly: true, Tags: []string{"lint", "pre-commit"}}}
+	case "native-app":
+		cfg.Gates = []gateConfig{{Name: "native project status", Command: "git status --short", ReadOnly: true, Tags: []string{"diagnostic", "pre-commit"}}}
+	case "mixed":
+		cfg.Gates = []gateConfig{{Name: "workspace hygiene", Command: "vigil checks:workspace-hygiene", ReadOnly: true, Tags: []string{"diagnostic", "pre-commit"}}}
+	case "custom":
+		cfg.Gates = []gateConfig{{Name: "status", Command: "git status --short", ReadOnly: true, Tags: []string{"diagnostic", "pre-commit"}}}
 	default:
 		cfg.Profile = "generic"
 		cfg.Gates = []gateConfig{{Name: "status", Command: "git status --short", ReadOnly: true, Tags: []string{"diagnostic", "pre-commit"}}}
@@ -2840,11 +2855,11 @@ func validateConfigIssues(cfg config) []configIssue {
 	if strings.TrimSpace(cfg.Project) == "" {
 		add("project", "project.required", "project is required")
 	}
-	if len(cfg.Authority.MutationRequires) == 0 {
-		add("authority.mutation_requires", "authority.mutation_requires.required", "authority.mutation_requires must name at least one confirmation requirement")
+	if len(cfg.Coordination.MutationRequires) == 0 {
+		add("coordination.mutation_requires", "coordination.mutation_requires.required", "coordination.mutation_requires must name at least one confirmation requirement")
 	}
 	if len(cfg.Gates) == 0 {
-		add("gates", "gates.required", "gates must include at least one read-only diagnostic gate")
+		add("gates", "gates.required", "gates must include at least one read-only diagnostic check")
 	}
 	for i, gate := range cfg.Gates {
 		if strings.TrimSpace(gate.Name) == "" || strings.TrimSpace(gate.Command) == "" {

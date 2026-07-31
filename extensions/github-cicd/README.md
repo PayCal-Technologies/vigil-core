@@ -1,6 +1,7 @@
-# GitHub CI/CD Extension
+# GitHub Actions Helper Extension
 
-This is the canonical public GitHub extension for running Vigil in CI/CD.
+This is the canonical public GitHub extension for running Vigil preflight checks
+inside GitHub Actions.
 
 ```bash
 vigil github:init-ci
@@ -8,4 +9,4 @@ vigil github:init-ci --write
 ```
 
 The generated workflow installs Vigil Core, runs `vigil verify --json`, and then
-runs the gates from `vigil.config.json`.
+runs the configured checks from `vigil.config.json`.

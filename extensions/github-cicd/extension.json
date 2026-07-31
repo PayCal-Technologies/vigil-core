@@ -1,12 +1,12 @@
 {
   "schema_version": "1",
   "id": "github-cicd",
-  "name": "GitHub CI/CD Extension",
+  "name": "GitHub Actions Helper Extension",
   "kind": "custom",
   "status": "public",
   "private": false,
   "public_core": true,
-  "description": "Canonical public GitHub Actions extension for running Vigil in CI/CD.",
+  "description": "Canonical public GitHub Actions extension for running Vigil preflight checks.",
   "source_root": "extensions/github-cicd",
   "packages": [],
   "commands": [
@@ -18,7 +18,7 @@
       "access": "conditional-write",
       "write_flags": ["--write"],
       "usage": "vigil github:init-ci [--write] [--json]",
-      "description": "Generate a GitHub Actions workflow from Vigil gates.",
+      "description": "Generate a GitHub Actions workflow from Vigil preflight checks.",
       "examples": [
         "vigil github:init-ci",
         "vigil github:init-ci --write"

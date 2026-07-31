@@ -1,14 +1,15 @@
 # Vigil Core
 
-Vigil is a local-first release, configuration, and agent-safety tool for teams
-that want repository automation to explain itself before it mutates anything.
+Vigil is a GitHub-adjacent release, configuration, preflight, and agent-safety
+tool for teams that want repository automation to explain itself before it
+mutates anything.
 
 This public repository contains the source-available core:
 
 - versioned JSON configuration;
 - guided config creation and validation;
 - local `doctor`, `status`, `plan`, `verify`, and support-bundle diagnostics;
-- config-driven local workflow gates;
+- config-driven local preflight checks;
 - git hook shims for pre-commit and pre-push;
 - generic workspace hygiene, staged-secret, dependency inventory, and command
   catalog checks;
@@ -21,9 +22,9 @@ commands or policy surfaces.
 ## Current Public Surface
 
 Vigil Core is the public, standalone CLI foundation. It provides config
-diagnostics, local workflow gates, hooks, Scribe README automation, public
-adapter extensions, release-readiness checks, and a canonical GitHub CI/CD
-extension. Commands are composed from core plus loaded extensions, so extension
+diagnostics, local preflight checks, hooks, Scribe README automation, public
+adapter extensions, release-readiness checks, and a canonical GitHub Actions
+helper extension. Commands are composed from core plus loaded extensions, so extension
 commands appear only when their manifests are valid and enabled.
 
 <!-- scribe:begin -->
@@ -65,10 +66,12 @@ vigil workflow:local
 vigil extensions:doctor --json
 ```
 
-## CI/CD Use
+## GitHub-Adjacent Use
 
-Vigil Core runs local CI/CD from `vigil.config.json`. Each gate is a named shell
-command with metadata that tells humans and automation whether it is read-only.
+Vigil Core provides local preflight from `vigil.config.json`. Each check is a
+named shell command with metadata that tells humans and automation whether it is
+read-only. GitHub, reviewed repository configuration, and active workflow files
+remain the collaboration and hosted CI surfaces when a project uses them.
 
 ```json
 {
@@ -105,7 +108,7 @@ Only `vigil help` uses compact markers. Manuals, command catalogs, guard
 summaries, extension contracts, and JSON output use canonical values.
 Extension commands with `conditional-write` access must declare `write_flags`;
 without those flags, Vigil treats the base invocation as a preview and does not
-require mutation authority.
+require mutation confirmation.
 
 Examples:
 
@@ -144,8 +147,8 @@ Git hooks:
 vigil hooks:install
 ```
 
-This installs `pre-commit` and `pre-push` hook shims that run the configured
-Vigil workflow.
+This installs `pre-commit` and `pre-push` hook shims that run configured Vigil
+preflight checks.
 
 Built-in public checks:
 
@@ -272,13 +275,13 @@ vigil readme:generate
 vigil readme:check
 ```
 
-Mutation authority is enforced at the CLI boundary. Commands that write files
+Mutation confirmation is enforced at the CLI boundary. Commands that write files
 require `--allow-mutation`, except commands explicitly marked `auto_enabled` in
 the command catalog. Today `readme:generate` may run with `--auto` because its
 output is deterministic and idempotent: repeated runs converge on the same
 managed block while preserving human-authored README content.
 
-README freshness can also be represented as a normal config gate:
+README freshness can also be represented as a normal config check:
 
 ```json
 {
@@ -318,11 +321,12 @@ vigil help config:report
 
 These commands are intentionally local-first. Missing tools are reported
 directly, and teams can replace or supplement adapter commands with their own
-`vigil.config.json` gates.
+`vigil.config.json` checks.
 
-## CI/CD
+## GitHub Actions
 
-Vigil can generate a public GitHub Actions workflow from local gates:
+Vigil can generate a public GitHub Actions workflow that runs local preflight
+checks inside GitHub Actions:
 
 ```bash
 vigil init:ci --provider=github
@@ -339,7 +343,7 @@ Public binary release guidance lives in [docs/releasing.md](docs/releasing.md).
 
 ## Ethos
 
-Vigil treats automation as an accountable system. It should make authority,
+Vigil treats automation as an accountable system. It should make coordination,
 configuration, risk, and mutation boundaries explicit enough for both a human
 maintainer and an AI agent to understand what is safe, what is missing, and what
 needs confirmation.
