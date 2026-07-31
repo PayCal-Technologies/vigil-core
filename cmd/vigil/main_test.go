@@ -70,6 +70,81 @@ func TestManualForExtensionCommandUsesContract(t *testing.T) {
 	}
 }
 
+func TestManualForCoreCommandUsesCanonicalAccess(t *testing.T) {
+	manual, ok := manualForCommand("status")
+	if !ok {
+		t.Fatal("status manual missing")
+	}
+	if manual.Access != "read" {
+		t.Fatalf("status access = %q, want read", manual.Access)
+	}
+	manual, ok = manualForCommand("config:migrate")
+	if !ok {
+		t.Fatal("config:migrate manual missing")
+	}
+	if manual.Access != "conditional-write" {
+		t.Fatalf("config:migrate access = %q, want conditional-write", manual.Access)
+	}
+}
+
+func TestGuardsSummaryUsesCanonicalAccess(t *testing.T) {
+	commands := activeCommands()
+	access := map[string]string{}
+	for _, command := range commands {
+		access[command.Command] = command.Access
+	}
+	for _, command := range []string{"github:init-ci", "init:ci", "config:migrate"} {
+		if access[command] != "conditional-write" {
+			t.Fatalf("%s access = %q, want conditional-write", command, access[command])
+		}
+	}
+}
+
+func TestInvalidExtensionManifestCannotContributeActiveCommand(t *testing.T) {
+	temp := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+	if err := os.Chdir(temp); err != nil {
+		t.Fatal(err)
+	}
+	extDir := filepath.Join(temp, "extensions", "invalid")
+	if err := os.MkdirAll(extDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{
+  "schema_version": "1",
+  "id": "invalid",
+  "name": "Invalid Extension",
+  "kind": "custom",
+  "status": "local",
+  "private": false,
+  "public_core": true,
+  "description": "invalid extension",
+  "source_root": "extensions/invalid",
+  "packages": [],
+  "commands": ["invalid:active-command"],
+  "command_contracts": [
+    {"command": "invalid:active-command", "access": "r/w", "usage": "vigil invalid:active-command", "description": "invalid"}
+  ]
+}`
+	if err := os.WriteFile(filepath.Join(extDir, "extension.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	report := loadExtensions(extensionRoot())
+	if report.Status != "fail" {
+		t.Fatalf("extension report status = %q issues=%#v", report.Status, report.Issues)
+	}
+	if len(report.Extensions) != 0 {
+		t.Fatalf("invalid extension loaded: %#v", report.Extensions)
+	}
+	if extensionCommandLoaded("invalid:active-command") {
+		t.Fatal("invalid extension command should not be loadable")
+	}
+}
+
 func TestGithubWorkflowRunsPolicyEngine(t *testing.T) {
 	cfg := templateConfig("generic")
 	out := githubWorkflow(cfg)

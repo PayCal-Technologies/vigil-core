@@ -278,7 +278,7 @@ func printHelp() {
 	fmt.Println()
 	fmt.Println("core")
 	for _, command := range commands {
-		fmt.Printf("  %-3s %-*s   %s\n", helpAccessMarker(command.Command), width, command.Command, compactHelpDescription(command.Description))
+		fmt.Printf("  %-3s %-*s   %s\n", compactAccessMarker(command.Access), width, command.Command, compactHelpDescription(command.Description))
 	}
 }
 
@@ -483,7 +483,7 @@ func manualForCommand(name string) (commandManual, bool) {
 		}
 		access := info.Access
 		if access == "" {
-			access = helpAccessMarker(info.Command)
+			access = commandAccess(info.Command)
 		}
 		return commandManual{Command: info.Command, Source: info.Source, Access: access, Usage: usage, Description: info.Description, Examples: info.Examples, InstallHint: info.InstallHint, Related: relatedCommands(info.Command)}, true
 	}
@@ -780,7 +780,7 @@ func guardsSummary(args []string) int {
 	readOnly := []string{}
 	mutating := []string{}
 	for _, command := range activeCommands() {
-		if helpAccessMarker(command.Command) == "r" {
+		if command.Access == "read" {
 			readOnly = append(readOnly, command.Command)
 		} else {
 			mutating = append(mutating, command.Command)
@@ -1089,6 +1089,9 @@ func activeCommands() []commandInfo {
 		}
 	}
 	for i := range commands {
+		if strings.TrimSpace(commands[i].Access) == "" {
+			commands[i].Access = commandAccess(commands[i].Command)
+		}
 		if autoEnabledCommand(commands[i].Command) {
 			commands[i].AutoEnabled = true
 			commands[i].AutoReason = "deterministic idempotent repair"
@@ -1147,12 +1150,28 @@ func extensionCommandDescription(command, fallback string) string {
 	return fallback
 }
 
-func helpAccessMarker(command string) string {
+func commandAccess(command string) string {
+	if access := extensionCommandAccess(command); access != "" {
+		return access
+	}
 	switch command {
-	case "config:init", "config:repair", "hooks:install", "hooks:pre-commit", "hooks:pre-push", "readme:generate", "support:bundle", "workflow:local":
+	case "config:init", "config:migrate", "config:repair", "github:init-ci", "hooks:install", "hooks:pre-commit", "hooks:pre-push", "init:ci", "readme:generate", "support:bundle", "workflow:local":
 		return "conditional-write"
 	default:
+		return "read"
+	}
+}
+
+func compactAccessMarker(access string) string {
+	switch access {
+	case "read":
 		return "r"
+	case "write":
+		return "w"
+	case "conditional-write":
+		return "r/w"
+	default:
+		return access
 	}
 }
 
@@ -2586,7 +2605,11 @@ func loadExtensions(root string) extensionReport {
 		if disabledIDs[ext.ID] {
 			continue
 		}
+		issueCount := len(report.Issues)
 		report.Issues = append(report.Issues, validateExtension(ext)...)
+		if len(report.Issues) > issueCount {
+			continue
+		}
 		report.Extensions = append(report.Extensions, ext)
 	}
 	sort.Slice(report.Extensions, func(i, j int) bool { return report.Extensions[i].ID < report.Extensions[j].ID })

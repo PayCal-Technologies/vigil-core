@@ -90,6 +90,47 @@ vigil verify --json
 vigil support:bundle --dry-run
 ```
 
+## Access Contract
+
+Vigil reports one canonical access contract everywhere machine-readable metadata
+is exposed:
+
+| Canonical access | Help marker | Meaning |
+| --- | --- | --- |
+| `read` | `r` | Does not mutate source, generated artifacts, operational state, or external systems. |
+| `write` | `w` | Mutates by default unless the command exposes an explicit read-only override such as `--dry-run` or `--check`. |
+| `conditional-write` | `r/w` | Read-only by default and mutates only when a registered write flag such as `--write`, `--heal`, `--fix`, or `--execute` is present. |
+
+Only `vigil help` uses compact markers. Manuals, command catalogs, guard
+summaries, extension contracts, and JSON output use canonical values.
+
+Examples:
+
+```bash
+# Compact human index: conditional-write commands appear as r/w.
+vigil help
+
+# Canonical access values in command metadata.
+vigil list --json
+
+# Canonical guard classification for mutating commands.
+vigil guards:summary --json
+
+# Safe previews for conditional writers.
+vigil init:ci
+vigil github:init-ci
+vigil config:migrate
+
+# Confirm writes only when mutation is intentional.
+vigil --allow-mutation init:ci --write
+vigil --allow-mutation github:init-ci --write
+vigil --allow-mutation config:migrate --write
+
+# Always-write commands with real read-only overrides expose those flags.
+vigil support:bundle --dry-run
+vigil --allow-mutation support:bundle
+```
+
 Git hooks:
 
 ```bash
@@ -146,6 +187,8 @@ set.
 
 Extensions are described by `extensions/<id>/extension.json`. The public core
 validates extension manifests and reports which extensions are available.
+Invalid manifests fail closed: their validation issues are reported by
+`extensions:doctor`, but their commands are excluded from the loaded command set.
 
 ```json
 {
@@ -169,6 +212,10 @@ Use:
 vigil extensions:list
 vigil extensions:doctor --json
 ```
+
+Command contracts must use canonical access values: `read`, `write`, or
+`conditional-write`. Shorthand such as `r/w` is display-only help text and is
+rejected in manifests.
 
 Public extensions included in this repository:
 
