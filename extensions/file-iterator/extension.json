@@ -1,0 +1,15 @@
+{
+  "schema_version": "1",
+  "id": "file-iterator",
+  "name": "File Iterator Example Extension",
+  "kind": "custom",
+  "status": "example",
+  "private": false,
+  "public_core": true,
+  "description": "Canonical example extension that contributes a read-only CLI command for iterating over matching files.",
+  "source_root": "extensions/file-iterator",
+  "packages": [],
+  "commands": [
+    "files:iterate"
+  ]
+}
