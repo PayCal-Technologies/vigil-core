@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -20,6 +21,8 @@ const (
 	configSchemaVersion = "1"
 	defaultConfigName   = "vigil.config.json"
 )
+
+var promptReader = bufio.NewReader(os.Stdin)
 
 type config struct {
 	SchemaVersion            string            `json:"schema_version"`
@@ -49,6 +52,12 @@ type extensionsConfig struct {
 	ManifestRoot   string   `json:"manifest_root"`
 	AllowedKinds   []string `json:"allowed_kinds"`
 	RequirePrivate bool     `json:"require_private"`
+}
+
+type configIssue struct {
+	Field   string `json:"field"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
 }
 
 type extensionManifest struct {
@@ -138,6 +147,8 @@ func run(args []string) int {
 		return initConfig(*configPath, commandArgs)
 	case "config:validate":
 		return validateConfig(*configPath, commandArgs)
+	case "config:repair":
+		return repairConfig(*configPath, commandArgs)
 	case "extensions:list", "extensions:doctor":
 		return extensionCommand(command, commandArgs)
 	case "files:iterate":
@@ -180,6 +191,7 @@ Commands:
   config:schema [--json]
   config:init [--profile=go-tool|static-site|generic] [--write] [--force] [--json]
   config:validate [--json]
+  config:repair [--yes] [--profile=go-tool|static-site|generic]
   extensions:list [--json]
   extensions:doctor [--json]
   files:iterate --root=PATH --glob=PATTERN [--jsonl]`)
@@ -290,11 +302,13 @@ func validateConfig(configPath string, args []string) int {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return validationOutput(jsonOut, path, []string{"invalid JSON: " + err.Error()})
 	}
-	var issues []string
-	if err := validateStruct(cfg); err != nil {
-		issues = append(issues, err.Error())
+	issues := validateConfigIssues(cfg)
+	if jsonOut {
+		messages := issueMessages(issues)
+		status := okFail(len(messages))
+		return printStatusJSON(map[string]any{"status": status, "path": path, "issues": messages, "structured_issues": issues, "repair_command": "vigil config:repair"}, len(messages))
 	}
-	return validationOutput(jsonOut, path, issues)
+	return validationOutput(false, path, issueMessages(issues))
 }
 
 func validationOutput(jsonOut bool, path string, issues []string) int {
@@ -309,14 +323,162 @@ func validationOutput(jsonOut bool, path string, issues []string) int {
 		return exit
 	}
 	if status == "ok" {
-		fmt.Printf("[config] OK: %s\n", path)
+		fmt.Printf("%s config: %s\n", statusLabel("ok"), path)
 	} else {
-		fmt.Printf("[config] FAIL: %s\n", path)
+		fmt.Printf("%s config: %s\n", statusLabel("fail"), path)
 		for _, issue := range issues {
 			fmt.Printf("- %s\n", issue)
 		}
 	}
 	return exit
+}
+
+func repairConfig(configPath string, args []string) int {
+	fs := flag.NewFlagSet("config:repair", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	profile := fs.String("profile", "generic", "profile for defaults")
+	yes := fs.Bool("yes", false, "accept defaults without prompting")
+	jsonOut := fs.Bool("json", false, "json output")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	path := resolvedConfigPath(configPath)
+	cfg := templateConfig(*profile)
+	existed := fileExists(path)
+	replacedMalformed := false
+	if existed {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		if strings.TrimSpace(string(data)) != "" {
+			if err := json.Unmarshal(data, &cfg); err != nil {
+				if !*yes && !promptBool("Config is not valid JSON. Replace it with a valid template?", false) {
+					fmt.Fprintln(os.Stderr, "config repair cancelled")
+					return 1
+				}
+				cfg = templateConfig(*profile)
+				replacedMalformed = true
+			}
+		}
+	}
+	before := validateConfigIssues(cfg)
+	if existed && len(before) == 0 && !replacedMalformed {
+		if *jsonOut {
+			return printJSON(map[string]any{"status": "ok", "path": path, "changed": false, "issues": []configIssue{}})
+		}
+		fmt.Printf("%s config: %s\n", statusLabel("ok"), path)
+		return 0
+	}
+	if *yes {
+		cfg = applyConfigDefaults(cfg, *profile)
+	} else {
+		cfg = promptConfigRepair(cfg, *profile)
+	}
+	after := validateConfigIssues(cfg)
+	if len(after) > 0 {
+		if *jsonOut {
+			return printStatusJSON(map[string]any{"status": "fail", "path": path, "issues": issueMessages(after), "structured_issues": after}, 1)
+		}
+		fmt.Fprintln(os.Stderr, "config still has issues:")
+		for _, issue := range after {
+			fmt.Fprintln(os.Stderr, "- "+issue.Message)
+		}
+		return 1
+	}
+	if !*yes && !promptBool("Write repaired config to "+path+"?", true) {
+		fmt.Fprintln(os.Stderr, "config repair cancelled")
+		return 1
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	data = append(data, '\n')
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	if *jsonOut {
+		return printJSON(map[string]any{"status": "ok", "path": path, "changed": true, "replaced_malformed": replacedMalformed, "fixed_issues": before})
+	}
+	fmt.Printf("%s repaired config: %s\n", statusLabel("ok"), path)
+	return 0
+}
+
+func promptConfigRepair(cfg config, profile string) config {
+	defaults := templateConfig(profile)
+	if cfg.SchemaVersion != configSchemaVersion {
+		cfg.SchemaVersion = promptString("schema_version", configSchemaVersion)
+	}
+	if strings.TrimSpace(cfg.Profile) == "" {
+		cfg.Profile = promptString("profile", defaults.Profile)
+	}
+	if strings.TrimSpace(cfg.Project) == "" {
+		cfg.Project = promptString("project", defaults.Project)
+	}
+	if len(cfg.Authority.MutationRequires) == 0 {
+		cfg.Authority.LocalFirst = promptBool("authority.local_first", true)
+		cfg.Authority.MutationRequires = splitCSV(promptString("authority.mutation_requires", strings.Join(defaults.Authority.MutationRequires, ",")))
+	}
+	if len(cfg.Gates) == 0 {
+		if promptBool("Add a default read-only gate?", true) {
+			cfg.Gates = defaults.Gates
+		}
+	}
+	for i := range cfg.Gates {
+		if strings.TrimSpace(cfg.Gates[i].Name) == "" {
+			cfg.Gates[i].Name = promptString(fmt.Sprintf("gates[%d].name", i), "gate")
+		}
+		if strings.TrimSpace(cfg.Gates[i].Command) == "" {
+			cfg.Gates[i].Command = promptString(fmt.Sprintf("gates[%d].command", i), "git status --short")
+		}
+	}
+	if cfg.Extensions.Enabled && strings.TrimSpace(cfg.Extensions.ManifestRoot) == "" {
+		cfg.Extensions.ManifestRoot = promptString("extensions.manifest_root", defaults.Extensions.ManifestRoot)
+	}
+	if len(cfg.Extensions.AllowedKinds) == 0 {
+		cfg.Extensions.AllowedKinds = splitCSV(promptString("extensions.allowed_kinds", strings.Join(defaults.Extensions.AllowedKinds, ",")))
+	}
+	cfg.PublicAssumptionPatterns = repairPatternPrompts(cfg.PublicAssumptionPatterns)
+	return cfg
+}
+
+func applyConfigDefaults(cfg config, profile string) config {
+	defaults := templateConfig(profile)
+	if cfg.SchemaVersion != configSchemaVersion {
+		cfg.SchemaVersion = configSchemaVersion
+	}
+	if strings.TrimSpace(cfg.Profile) == "" {
+		cfg.Profile = defaults.Profile
+	}
+	if strings.TrimSpace(cfg.Project) == "" {
+		cfg.Project = defaults.Project
+	}
+	if len(cfg.Authority.MutationRequires) == 0 {
+		cfg.Authority = defaults.Authority
+	}
+	if len(cfg.Gates) == 0 {
+		cfg.Gates = defaults.Gates
+	}
+	for i := range cfg.Gates {
+		if strings.TrimSpace(cfg.Gates[i].Name) == "" {
+			cfg.Gates[i].Name = "gate"
+		}
+		if strings.TrimSpace(cfg.Gates[i].Command) == "" {
+			cfg.Gates[i].Command = "git status --short"
+		}
+	}
+	if cfg.Extensions.Enabled && strings.TrimSpace(cfg.Extensions.ManifestRoot) == "" {
+		cfg.Extensions.ManifestRoot = defaults.Extensions.ManifestRoot
+	}
+	if len(cfg.Extensions.AllowedKinds) == 0 {
+		cfg.Extensions.AllowedKinds = defaults.Extensions.AllowedKinds
+	}
+	cfg.PublicAssumptionPatterns = validPatternsOnly(cfg.PublicAssumptionPatterns)
+	return cfg
 }
 
 func extensionCommand(command string, args []string) int {
@@ -329,12 +491,12 @@ func extensionCommand(command string, args []string) int {
 	if jsonOut {
 		_ = printJSON(report)
 	} else {
-		fmt.Printf("[extensions] status=%s root=%s count=%d\n", report.Status, report.Root, report.Count)
+		fmt.Printf("%s extensions root=%s count=%d\n", statusLabel(report.Status), report.Root, report.Count)
 		for _, ext := range report.Extensions {
 			fmt.Printf("- %s (%s): %s\n", ext.ID, ext.Kind, ext.Description)
 		}
 		for _, issue := range report.Issues {
-			fmt.Printf("[issue] %s\n", issue)
+			fmt.Printf("%s %s\n", statusLabel("fail"), issue)
 		}
 	}
 	if command == "extensions:doctor" && report.Status == "fail" {
@@ -352,6 +514,7 @@ func activeCommands() []commandInfo {
 		{Command: "config:schema", Source: "core", Description: "Print the supported JSON config schema summary."},
 		{Command: "config:init", Source: "core", Description: "Generate or write a starter JSON config."},
 		{Command: "config:validate", Source: "core", Description: "Validate the effective JSON config."},
+		{Command: "config:repair", Source: "core", Description: "Interactively repair missing or broken Vigil JSON config fields."},
 		{Command: "completion", Source: "core", Description: "Generate shell completion for bash, zsh, or fish."},
 		{Command: "deps:inventory", Source: "core", Description: "Inventory common dependency manifests and lockfiles."},
 		{Command: "doctor", Source: "core", Description: "Check local readiness for using Vigil Core in CI/CD workflows."},
@@ -419,7 +582,7 @@ func doctor(configPath string, args []string) int {
 		return printStatusJSON(map[string]any{"status": status, "checks": checks}, failures)
 	}
 	for _, check := range checks {
-		fmt.Printf("[%s] %s: %s\n", check.Status, check.Name, check.Detail)
+		fmt.Printf("%s %s: %s\n", statusLabel(check.Status), check.Name, check.Detail)
 	}
 	return failures
 }
@@ -505,7 +668,7 @@ func workflowLocal(configPath string, args []string) int {
 			return printJSON(map[string]any{"status": "ok", "dry_run": true, "gates": cfg.Gates})
 		}
 		for _, gate := range cfg.Gates {
-			fmt.Printf("[dry-run] %s: %s\n", gate.Name, gate.Command)
+			fmt.Printf("%s dry-run %s: %s\n", statusLabel("ok"), gate.Name, gate.Command)
 		}
 		return 0
 	}
@@ -522,7 +685,7 @@ func workflowLocal(configPath string, args []string) int {
 		result := gateResult{Name: gate.Name, Command: gate.Command, Status: status, ExitCode: code, DurationMS: time.Since(start).Milliseconds(), Output: trimOutput(out)}
 		results = append(results, result)
 		if !*jsonOut {
-			fmt.Printf("[%s] %s (%d ms)\n", result.Status, result.Name, result.DurationMS)
+			fmt.Printf("%s %s (%d ms)\n", statusLabel(result.Status), result.Name, result.DurationMS)
 			if result.Output != "" {
 				fmt.Println(result.Output)
 			}
@@ -568,7 +731,7 @@ func verify(configPath string, args []string) int {
 		return printStatusJSON(map[string]any{"status": status, "checks": checks}, failures)
 	}
 	for _, check := range checks {
-		fmt.Printf("[%s] %s\n", check.Status, check.Name)
+		fmt.Printf("%s %s\n", statusLabel(check.Status), check.Name)
 	}
 	return failures
 }
@@ -665,7 +828,7 @@ func checkCommandCatalog(args []string) int {
 		return printStatusJSON(map[string]any{"status": okFail(len(issues)), "command_count": len(activeCommands()), "issues": issues}, len(issues))
 	}
 	if len(issues) == 0 {
-		fmt.Printf("[command-catalog] OK: %d commands\n", len(activeCommands()))
+		fmt.Printf("%s command-catalog: %d commands\n", statusLabel("ok"), len(activeCommands()))
 		return 0
 	}
 	for _, issue := range issues {
@@ -1041,39 +1204,55 @@ func templateConfig(profile string) config {
 }
 
 func validateStruct(cfg config) error {
-	var issues []string
-	if cfg.SchemaVersion != configSchemaVersion {
-		issues = append(issues, "schema_version must be "+configSchemaVersion)
-	}
-	if strings.TrimSpace(cfg.Profile) == "" {
-		issues = append(issues, "profile is required")
-	}
-	if strings.TrimSpace(cfg.Project) == "" {
-		issues = append(issues, "project is required")
-	}
-	if len(cfg.Authority.MutationRequires) == 0 {
-		issues = append(issues, "authority.mutation_requires must name at least one confirmation requirement")
-	}
-	if len(cfg.Gates) == 0 {
-		issues = append(issues, "gates must include at least one read-only diagnostic gate")
-	}
-	for i, gate := range cfg.Gates {
-		if strings.TrimSpace(gate.Name) == "" || strings.TrimSpace(gate.Command) == "" {
-			issues = append(issues, fmt.Sprintf("gates[%d] requires name and command", i))
-		}
-	}
-	if cfg.Extensions.Enabled && strings.TrimSpace(cfg.Extensions.ManifestRoot) == "" {
-		issues = append(issues, "extensions.manifest_root is required when extensions are enabled")
-	}
-	for i, pattern := range cfg.PublicAssumptionPatterns {
-		if _, err := regexp.Compile(pattern); err != nil {
-			issues = append(issues, fmt.Sprintf("public_assumption_patterns[%d] is invalid: %v", i, err))
-		}
-	}
+	issues := issueMessages(validateConfigIssues(cfg))
 	if len(issues) > 0 {
 		return errors.New(strings.Join(issues, "; "))
 	}
 	return nil
+}
+
+func validateConfigIssues(cfg config) []configIssue {
+	var issues []configIssue
+	add := func(field, code, message string) {
+		issues = append(issues, configIssue{Field: field, Code: code, Message: message})
+	}
+	if cfg.SchemaVersion != configSchemaVersion {
+		add("schema_version", "schema_version.invalid", "schema_version must be "+configSchemaVersion)
+	}
+	if strings.TrimSpace(cfg.Profile) == "" {
+		add("profile", "profile.required", "profile is required")
+	}
+	if strings.TrimSpace(cfg.Project) == "" {
+		add("project", "project.required", "project is required")
+	}
+	if len(cfg.Authority.MutationRequires) == 0 {
+		add("authority.mutation_requires", "authority.mutation_requires.required", "authority.mutation_requires must name at least one confirmation requirement")
+	}
+	if len(cfg.Gates) == 0 {
+		add("gates", "gates.required", "gates must include at least one read-only diagnostic gate")
+	}
+	for i, gate := range cfg.Gates {
+		if strings.TrimSpace(gate.Name) == "" || strings.TrimSpace(gate.Command) == "" {
+			add(fmt.Sprintf("gates[%d]", i), "gates.entry.invalid", fmt.Sprintf("gates[%d] requires name and command", i))
+		}
+	}
+	if cfg.Extensions.Enabled && strings.TrimSpace(cfg.Extensions.ManifestRoot) == "" {
+		add("extensions.manifest_root", "extensions.manifest_root.required", "extensions.manifest_root is required when extensions are enabled")
+	}
+	for i, pattern := range cfg.PublicAssumptionPatterns {
+		if _, err := regexp.Compile(pattern); err != nil {
+			add(fmt.Sprintf("public_assumption_patterns[%d]", i), "public_assumption_patterns.invalid", fmt.Sprintf("public_assumption_patterns[%d] is invalid: %v", i, err))
+		}
+	}
+	return issues
+}
+
+func issueMessages(issues []configIssue) []string {
+	messages := make([]string, 0, len(issues))
+	for _, issue := range issues {
+		messages = append(messages, issue.Message)
+	}
+	return messages
 }
 
 func loadConfig(path string) (config, string, error) {
@@ -1198,13 +1377,101 @@ func findingsOutput(jsonOut bool, name string, findings []string) int {
 		return printStatusJSON(map[string]any{"status": status, "check": name, "findings": findings, "count": len(findings)}, len(findings))
 	}
 	if len(findings) == 0 {
-		fmt.Printf("[%s] OK\n", name)
+		fmt.Printf("%s %s\n", statusLabel("ok"), name)
 		return 0
 	}
 	for _, finding := range findings {
 		fmt.Println(finding)
 	}
 	return 1
+}
+
+func promptString(label, def string) string {
+	fmt.Printf("%s [default: %s]: ", label, def)
+	value, _ := promptReader.ReadString('\n')
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return def
+	}
+	return value
+}
+
+func promptBool(label string, def bool) bool {
+	defText := "y"
+	if !def {
+		defText = "n"
+	}
+	for {
+		value := strings.ToLower(promptString(label+" (y/n)", defText))
+		switch value {
+		case "y", "yes":
+			return true
+		case "n", "no":
+			return false
+		}
+		fmt.Println("Please answer y or n.")
+	}
+}
+
+func splitCSV(value string) []string {
+	var out []string
+	for _, part := range strings.Split(value, ",") {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
+func repairPatternPrompts(patterns []string) []string {
+	var repaired []string
+	for i, pattern := range patterns {
+		if _, err := regexp.Compile(pattern); err == nil {
+			repaired = append(repaired, pattern)
+			continue
+		}
+		if promptBool(fmt.Sprintf("Remove invalid public_assumption_patterns[%d]?", i), true) {
+			continue
+		}
+		repaired = append(repaired, promptString(fmt.Sprintf("Replacement regex for public_assumption_patterns[%d]", i), ""))
+	}
+	return validPatternsOnly(repaired)
+}
+
+func validPatternsOnly(patterns []string) []string {
+	var out []string
+	for _, pattern := range patterns {
+		if _, err := regexp.Compile(pattern); err == nil {
+			out = append(out, pattern)
+		}
+	}
+	return out
+}
+
+func statusLabel(status string) string {
+	label := "[" + strings.ToUpper(status) + "]"
+	if !colorEnabled() {
+		return label
+	}
+	switch strings.ToLower(status) {
+	case "ok":
+		return "\033[32m" + label + "\033[0m"
+	case "fail":
+		return "\033[31m" + label + "\033[0m"
+	case "warn":
+		return "\033[33m" + label + "\033[0m"
+	default:
+		return label
+	}
+}
+
+func colorEnabled() bool {
+	if os.Getenv("NO_COLOR") != "" || os.Getenv("CI") != "" {
+		return false
+	}
+	info, err := os.Stdout.Stat()
+	return err == nil && (info.Mode()&os.ModeCharDevice) != 0
 }
 
 func samePath(path, other string) bool {

@@ -35,6 +35,7 @@ go build -o bin/vigil ./cmd/vigil
 ```bash
 vigil config:init --write
 vigil config:validate
+vigil config:repair
 vigil doctor
 vigil workflow:local --dry-run
 vigil workflow:local
@@ -88,15 +89,31 @@ vigil deps:inventory --json
 ## Config
 
 Vigil uses JSON for configuration. A repo-local `vigil.config.json` is the
-default, and `--config PATH` can point Vigil at an explicit file.
+default. Vigil searches upward from the current directory for that file, and
+`--config PATH` can point Vigil at an explicit file.
 
 ```bash
 vigil config:schema
 vigil config:init --profile=go-tool --write
 vigil --config ./candidate.vigil.config.json config:validate --json
+vigil config:repair
+vigil config:repair --yes
 ```
 
 The current schema version is `1`.
+
+`config:validate --json` returns machine-readable `structured_issues` and a
+repair hint. `config:repair` uses classic command-line stdin prompts and shows
+`[default: value]` for answers that can be accepted by pressing enter.
+`--yes` applies the default repair without prompting.
+
+`public_assumption_patterns` is the config-owned deny-list used by
+`checks:public-assumptions`. Keep project-specific terms in config rather than
+hardcoding them into Vigil.
+
+Terminal output uses `[OK]`, `[FAIL]`, and `[WARN]` status labels. Labels are
+colorized on interactive terminals and stay plain when `NO_COLOR` or `CI` is
+set.
 
 ## Extensions
 

@@ -42,3 +42,39 @@ func TestConfigTemplateValidates(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateConfigIssuesExplainsMissingFields(t *testing.T) {
+	issues := validateConfigIssues(config{})
+	if len(issues) == 0 {
+		t.Fatal("expected missing config issues")
+	}
+	fields := map[string]bool{}
+	for _, issue := range issues {
+		fields[issue.Field] = true
+		if issue.Code == "" || issue.Message == "" {
+			t.Fatalf("issue missing code or message: %#v", issue)
+		}
+	}
+	for _, want := range []string{"schema_version", "profile", "project", "authority.mutation_requires", "gates"} {
+		if !fields[want] {
+			t.Fatalf("expected issue for %s, got %#v", want, issues)
+		}
+	}
+}
+
+func TestApplyConfigDefaultsRepairsMinimalConfig(t *testing.T) {
+	cfg := applyConfigDefaults(config{}, "generic")
+	if err := validateStruct(cfg); err != nil {
+		t.Fatalf("default repair failed validation: %v", err)
+	}
+}
+
+func TestApplyConfigDefaultsDropsInvalidPublicAssumptionPatterns(t *testing.T) {
+	cfg := applyConfigDefaults(config{PublicAssumptionPatterns: []string{"(?i)sample-pattern", "["}}, "generic")
+	if err := validateStruct(cfg); err != nil {
+		t.Fatalf("default repair failed validation: %v", err)
+	}
+	if len(cfg.PublicAssumptionPatterns) != 1 || cfg.PublicAssumptionPatterns[0] != "(?i)sample-pattern" {
+		t.Fatalf("unexpected repaired patterns: %#v", cfg.PublicAssumptionPatterns)
+	}
+}
