@@ -15,7 +15,8 @@
       "command": "go test ./...",
       "read_only": true,
       "tags": [
-        "test"
+        "test",
+        "pre-push"
       ]
     },
     {
@@ -23,7 +24,8 @@
       "command": "vigil verify --json",
       "read_only": true,
       "tags": [
-        "vigil"
+        "vigil",
+        "pre-commit"
       ]
     }
   ],

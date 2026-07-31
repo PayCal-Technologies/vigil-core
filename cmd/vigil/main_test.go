@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -92,6 +93,12 @@ func TestGithubWorkflowRunsPolicyEngine(t *testing.T) {
 	}
 }
 
+func TestGithubWorkflowUsesVigilOwnedGoVersion(t *testing.T) {
+	if got := goVersionForWorkflow(); got != vigilCoreGoVersion {
+		t.Fatalf("goVersionForWorkflow = %q, want %q", got, vigilCoreGoVersion)
+	}
+}
+
 func TestMutationAuthorityPolicy(t *testing.T) {
 	if !requiresMutationAuthority("readme:generate", nil) {
 		t.Fatal("readme:generate should require mutation authority")
@@ -107,6 +114,69 @@ func TestMutationAuthorityPolicy(t *testing.T) {
 	}
 	if !(authorityArgs{AllowMutation: true}).Allowed("config:repair") {
 		t.Fatal("--allow-mutation should allow explicit mutating repair")
+	}
+}
+
+func TestMutationRequirementsFailClosed(t *testing.T) {
+	temp := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+	if err := os.Chdir(temp); err != nil {
+		t.Fatal(err)
+	}
+	cfg := templateConfig("generic")
+	cfg.Authority.MutationRequires = []string{"explicit-confirmation", "unknown-policy"}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(defaultConfigName, append(data, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if mutationRequirementsSatisfied("", "readme:generate", authorityArgs{Auto: true}) {
+		t.Fatal("unknown mutation requirement should fail closed")
+	}
+}
+
+func TestMutationRequirementsCleanTree(t *testing.T) {
+	temp := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+	if err := os.Chdir(temp); err != nil {
+		t.Fatal(err)
+	}
+	if out, code := runCommand("git", "init"); code != 0 {
+		t.Fatalf("git init failed: %s", out)
+	}
+	cfg := templateConfig("generic")
+	cfg.Authority.MutationRequires = []string{"explicit-confirmation", "clean-config", "clean-tree"}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(defaultConfigName, append(data, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, code := runCommand("git", "add", defaultConfigName); code != 0 {
+		t.Fatalf("git add failed: %s", out)
+	}
+	if out, code := runCommand("git", "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "config"); code != 0 {
+		t.Fatalf("git commit failed: %s", out)
+	}
+	if !mutationRequirementsSatisfied("", "readme:generate", authorityArgs{Auto: true}) {
+		t.Fatal("clean tree should satisfy clean-tree")
+	}
+	if err := os.WriteFile("dirty.txt", []byte("dirty\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if mutationRequirementsSatisfied("", "readme:generate", authorityArgs{Auto: true}) {
+		t.Fatal("dirty tree should fail clean-tree")
 	}
 }
 
@@ -219,6 +289,81 @@ func TestHooksInstallPreflightsBeforeWriting(t *testing.T) {
 	}
 	if string(data) != preCommitBody {
 		t.Fatalf("pre-commit changed despite pre-push conflict:\n%s", data)
+	}
+}
+
+func TestHookRunUsesTagSubset(t *testing.T) {
+	temp := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+	if err := os.Chdir(temp); err != nil {
+		t.Fatal(err)
+	}
+	if out, code := runCommand("git", "init"); code != 0 {
+		t.Fatalf("git init failed: %s", out)
+	}
+	cfg := templateConfig("generic")
+	cfg.Gates = []gateConfig{
+		{Name: "commit gate", Command: "true", ReadOnly: true, Tags: []string{"pre-commit"}},
+		{Name: "push gate", Command: "false", ReadOnly: true, Tags: []string{"pre-push"}},
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(defaultConfigName, append(data, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, code := runCommand("git", "add", defaultConfigName); code != 0 {
+		t.Fatalf("git add failed: %s", out)
+	}
+	if out, code := runCommand("git", "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "config"); code != 0 {
+		t.Fatalf("git commit failed: %s", out)
+	}
+	if code := hookRun("", "pre-commit", nil); code != 0 {
+		t.Fatalf("pre-commit should run only passing gate, got %d", code)
+	}
+	if code := hookRun("", "pre-push", nil); code == 0 {
+		t.Fatal("pre-push should run failing push gate")
+	}
+}
+
+func TestReadOnlyFingerprintDetectsDirtyFileContentChangeOnFailedGate(t *testing.T) {
+	temp := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+	if err := os.Chdir(temp); err != nil {
+		t.Fatal(err)
+	}
+	if out, code := runCommand("git", "init"); code != 0 {
+		t.Fatalf("git init failed: %s", out)
+	}
+	if err := os.WriteFile("tracked.txt", []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := templateConfig("generic")
+	cfg.Gates = []gateConfig{{Name: "dirty failure", Command: "printf changed > tracked.txt; false", ReadOnly: true}}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(defaultConfigName, append(data, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, code := runCommand("git", "add", "tracked.txt", defaultConfigName); code != 0 {
+		t.Fatalf("git add failed: %s", out)
+	}
+	if out, code := runCommand("git", "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "base"); code != 0 {
+		t.Fatalf("git commit failed: %s", out)
+	}
+	if code := workflowLocal("", []string{"--json"}, false); code == 0 {
+		t.Fatal("read-only failed gate that mutates should fail")
 	}
 }
 

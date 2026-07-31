@@ -21,6 +21,7 @@ const (
 	configSchemaVersion = "1"
 	defaultConfigName   = "vigil.config.json"
 	vigilCoreInstallRef = "f48f19c3764a5a256455cc1d858d74eda2775745"
+	vigilCoreGoVersion  = "1.26.0"
 )
 
 var promptReader = bufio.NewReader(os.Stdin)
@@ -123,7 +124,7 @@ func run(args []string) int {
 	if requiresMutation && !authority.Allowed(command) {
 		return mutationAuthorityError(command, authority)
 	}
-	if requiresMutation && cleanConfigRequired(*configPath, command) {
+	if requiresMutation && !mutationRequirementsSatisfied(*configPath, command, authority) {
 		return 1
 	}
 	switch command {
@@ -375,22 +376,43 @@ func extensionCommandAccess(command string) string {
 	return ""
 }
 
-func cleanConfigRequired(configPath string, command string) bool {
+func mutationRequirementsSatisfied(configPath string, command string, authority authorityArgs) bool {
 	switch command {
 	case "config:init", "config:repair", "config:migrate":
-		return false
+		return true
 	}
 	cfg, path, err := loadConfig(configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s clean-config required before mutation: %s: %v\n", statusLabel("fail"), path, err)
-		return true
+		return false
 	}
-	for _, requirement := range cfg.Authority.MutationRequires {
-		if strings.TrimSpace(requirement) == "clean-config" {
+	requirements := cfg.Authority.MutationRequires
+	if len(requirements) == 0 {
+		requirements = []string{"explicit-confirmation", "clean-config"}
+	}
+	for _, requirement := range requirements {
+		switch strings.TrimSpace(requirement) {
+		case "", "explicit-confirmation":
+			if !authority.AllowMutation && !authority.Auto {
+				fmt.Fprintf(os.Stderr, "%s explicit-confirmation required before mutation\n", statusLabel("fail"))
+				return false
+			}
+		case "clean-config":
+			// loadConfig above validates the active config.
+		case "clean-tree":
+			if snapshot, ok := gitMutationFingerprint(); !ok {
+				fmt.Fprintf(os.Stderr, "%s clean-tree required but git fingerprint failed\n", statusLabel("fail"))
+				return false
+			} else if !snapshot.Clean {
+				fmt.Fprintf(os.Stderr, "%s clean-tree required before mutation\n", statusLabel("fail"))
+				return false
+			}
+		default:
+			fmt.Fprintf(os.Stderr, "%s unsupported mutation requirement: %s\n", statusLabel("fail"), requirement)
 			return false
 		}
 	}
-	return false
+	return true
 }
 
 func hasFlag(args []string, name string) bool {
@@ -1286,11 +1308,29 @@ type gateResult struct {
 	Output     string `json:"output,omitempty"`
 }
 
+func filterGatesByTag(gates []gateConfig, tag string) []gateConfig {
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return gates
+	}
+	filtered := make([]gateConfig, 0, len(gates))
+	for _, gate := range gates {
+		for _, candidate := range gate.Tags {
+			if candidate == tag {
+				filtered = append(filtered, gate)
+				break
+			}
+		}
+	}
+	return filtered
+}
+
 func workflowLocal(configPath string, args []string, allowMutation bool) int {
 	fs := flag.NewFlagSet("workflow:local", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	jsonOut := fs.Bool("json", false, "json output")
 	dryRun := fs.Bool("dry-run", false, "show gates without running")
+	tagFilter := fs.String("tag", "", "run gates matching tag")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -1299,18 +1339,19 @@ func workflowLocal(configPath string, args []string, allowMutation bool) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	gates := filterGatesByTag(cfg.Gates, *tagFilter)
 	if *dryRun {
 		if *jsonOut {
-			return printJSON(map[string]any{"status": "ok", "dry_run": true, "gates": cfg.Gates})
+			return printJSON(map[string]any{"status": "ok", "dry_run": true, "gates": gates})
 		}
-		for _, gate := range cfg.Gates {
+		for _, gate := range gates {
 			fmt.Printf("%s dry-run %s: %s\n", statusLabel("ok"), gate.Name, gate.Command)
 		}
 		return 0
 	}
 	var results []gateResult
 	failures := 0
-	for _, gate := range cfg.Gates {
+	for _, gate := range gates {
 		if !gate.ReadOnly && !allowMutation {
 			result := gateResult{Name: gate.Name, Command: gate.Command, Status: "fail", ExitCode: 1, Output: "mutation authority required for mutating gate; rerun workflow:local with --allow-mutation"}
 			results = append(results, result)
@@ -1320,7 +1361,16 @@ func workflowLocal(configPath string, args []string, allowMutation bool) int {
 			}
 			break
 		}
-		before, snapshotOK := gitStatusSnapshot()
+		before, snapshotOK := gitMutationFingerprint()
+		if gate.ReadOnly && !snapshotOK {
+			result := gateResult{Name: gate.Name, Command: gate.Command, Status: "fail", ExitCode: 1, Output: "read-only mutation fingerprint unavailable before gate"}
+			results = append(results, result)
+			failures++
+			if !*jsonOut {
+				fmt.Fprintf(os.Stderr, "%s %s: %s\n", statusLabel("fail"), gate.Name, result.Output)
+			}
+			break
+		}
 		start := time.Now()
 		out, code := runShell(gate.Command)
 		status := "ok"
@@ -1328,13 +1378,22 @@ func workflowLocal(configPath string, args []string, allowMutation bool) int {
 			status = "fail"
 			failures++
 		}
-		if code == 0 && gate.ReadOnly && snapshotOK {
-			after, afterOK := gitStatusSnapshot()
-			if afterOK && after != before {
+		if gate.ReadOnly {
+			after, afterOK := gitMutationFingerprint()
+			if !afterOK {
 				status = "fail"
+				if code == 0 {
+					failures++
+				}
 				code = 1
-				failures++
-				out = strings.TrimSpace(out + "\nread-only gate changed tracked git state")
+				out = strings.TrimSpace(out + "\nread-only mutation fingerprint unavailable after gate")
+			} else if after.Hash != before.Hash {
+				status = "fail"
+				if code == 0 {
+					failures++
+				}
+				code = 1
+				out = strings.TrimSpace(out + "\nread-only gate changed git workspace fingerprint")
 			}
 		}
 		result := gateResult{Name: gate.Name, Command: gate.Command, Status: status, ExitCode: code, DurationMS: time.Since(start).Milliseconds(), Output: trimOutput(out)}
@@ -1429,7 +1488,14 @@ func hooksInstall(args []string) int {
 
 func hookRun(configPath, hook string, args []string) int {
 	_ = args
-	return workflowLocal(configPath, nil, false)
+	switch hook {
+	case "pre-commit":
+		return workflowLocal(configPath, []string{"--tag=pre-commit"}, false)
+	case "pre-push":
+		return workflowLocal(configPath, []string{"--tag=pre-push"}, false)
+	default:
+		return workflowLocal(configPath, nil, false)
+	}
 }
 
 func checkStagedSensitive(args []string) int {
@@ -1689,17 +1755,7 @@ func githubWorkflow(cfg config) string {
 }
 
 func goVersionForWorkflow() string {
-	data, err := os.ReadFile("go.mod")
-	if err != nil {
-		return "1.26.0"
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) == 2 && fields[0] == "go" {
-			return fields[1]
-		}
-	}
-	return "1.26.0"
+	return vigilCoreGoVersion
 }
 
 func yamlScalar(value string) string {
@@ -2622,7 +2678,7 @@ func templateConfig(profile string) config {
 			MutationRequires: []string{"explicit-confirmation", "clean-config"},
 		},
 		Gates: []gateConfig{
-			{Name: "go test", Command: "go test ./...", ReadOnly: true, Tags: []string{"test"}},
+			{Name: "go test", Command: "go test ./...", ReadOnly: true, Tags: []string{"test", "pre-push"}},
 		},
 		Extensions: extensionsConfig{
 			Enabled:        true,
@@ -2633,14 +2689,14 @@ func templateConfig(profile string) config {
 	}
 	switch profile {
 	case "generic":
-		cfg.Gates = []gateConfig{{Name: "status", Command: "git status --short", ReadOnly: true, Tags: []string{"diagnostic"}}}
+		cfg.Gates = []gateConfig{{Name: "status", Command: "git status --short", ReadOnly: true, Tags: []string{"diagnostic", "pre-commit"}}}
 	case "go-tool":
-		cfg.Gates = []gateConfig{{Name: "go test", Command: "go test ./...", ReadOnly: true, Tags: []string{"test"}}, {Name: "go build", Command: "go build ./...", ReadOnly: true, Tags: []string{"build"}}}
+		cfg.Gates = []gateConfig{{Name: "go test", Command: "go test ./...", ReadOnly: true, Tags: []string{"test", "pre-push"}}, {Name: "go build", Command: "go build ./...", ReadOnly: true, Tags: []string{"build", "pre-push"}}}
 	case "static-site":
-		cfg.Gates = []gateConfig{{Name: "html/php lint", Command: "php -l index.php", ReadOnly: true, Tags: []string{"lint"}}}
+		cfg.Gates = []gateConfig{{Name: "html/php lint", Command: "php -l index.php", ReadOnly: true, Tags: []string{"lint", "pre-commit"}}}
 	default:
 		cfg.Profile = "generic"
-		cfg.Gates = []gateConfig{{Name: "status", Command: "git status --short", ReadOnly: true, Tags: []string{"diagnostic"}}}
+		cfg.Gates = []gateConfig{{Name: "status", Command: "git status --short", ReadOnly: true, Tags: []string{"diagnostic", "pre-commit"}}}
 	}
 	return cfg
 }
@@ -2794,15 +2850,66 @@ func gitRoot() string {
 	return strings.TrimSpace(out)
 }
 
-func gitStatusSnapshot() (string, bool) {
+type mutationFingerprint struct {
+	Hash  string
+	Clean bool
+}
+
+func gitMutationFingerprint() (mutationFingerprint, bool) {
 	if gitRoot() == "" {
-		return "", false
+		return mutationFingerprint{}, false
 	}
-	out, code := runCommand("git", "status", "--porcelain")
+	status, code := runCommand("git", "status", "--porcelain")
+	if code != 0 {
+		return mutationFingerprint{}, false
+	}
+	unstaged, code := runCommand("git", "diff", "--binary")
+	if code != 0 {
+		return mutationFingerprint{}, false
+	}
+	staged, code := runCommand("git", "diff", "--cached", "--binary")
+	if code != 0 {
+		return mutationFingerprint{}, false
+	}
+	untracked, ok := untrackedFingerprint()
+	if !ok {
+		return mutationFingerprint{}, false
+	}
+	sum := sha256.Sum256([]byte(status + "\x00" + unstaged + "\x00" + staged + "\x00" + untracked))
+	return mutationFingerprint{Hash: fmt.Sprintf("%x", sum[:]), Clean: strings.TrimSpace(status) == ""}, true
+}
+
+func untrackedFingerprint() (string, bool) {
+	out, code := runCommand("git", "ls-files", "--others", "--exclude-standard")
 	if code != 0 {
 		return "", false
 	}
-	return out, true
+	files := strings.Split(strings.TrimSpace(out), "\n")
+	if len(files) == 1 && files[0] == "" {
+		return "", true
+	}
+	var b strings.Builder
+	root := gitRoot()
+	for _, file := range files {
+		path := filepath.Join(root, file)
+		info, err := os.Stat(path)
+		if err != nil {
+			return "", false
+		}
+		if info.IsDir() {
+			continue
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return "", false
+		}
+		sum := sha256.Sum256(data)
+		b.WriteString(file)
+		b.WriteByte('\x00')
+		b.WriteString(fmt.Sprintf("%x", sum[:]))
+		b.WriteByte('\n')
+	}
+	return b.String(), true
 }
 
 func gitLines(args ...string) []string {
