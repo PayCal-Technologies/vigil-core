@@ -20,6 +20,7 @@ const (
 	version             = "0.1.0"
 	configSchemaVersion = "1"
 	defaultConfigName   = "vigil.config.json"
+	vigilCoreInstallRef = "f48f19c3764a5a256455cc1d858d74eda2775745"
 )
 
 var promptReader = bufio.NewReader(os.Stdin)
@@ -118,8 +119,12 @@ func run(args []string) int {
 	}
 	command := rest[0]
 	commandArgs := rest[1:]
-	if requiresMutationAuthority(command, commandArgs) && !authority.Allowed(command) {
+	requiresMutation := requiresMutationAuthority(command, commandArgs)
+	if requiresMutation && !authority.Allowed(command) {
 		return mutationAuthorityError(command, authority)
+	}
+	if requiresMutation && cleanConfigRequired(*configPath, command) {
+		return 1
 	}
 	switch command {
 	case "help", "--help", "-h":
@@ -341,7 +346,7 @@ func requiresMutationAuthority(command string, args []string) bool {
 		return hasFlag(args, "write") || hasFlag(args, "force")
 	case "config:migrate":
 		return hasFlag(args, "write")
-	case "config:repair", "hooks:install", "hooks:pre-commit", "hooks:pre-push":
+	case "config:repair", "hooks:install":
 		return true
 	case "init:ci", "github:init-ci":
 		return hasFlag(args, "write")
@@ -350,8 +355,42 @@ func requiresMutationAuthority(command string, args []string) bool {
 	case "support:bundle":
 		return !hasFlag(args, "dry-run")
 	default:
+		return extensionCommandRequiresMutation(command)
+	}
+}
+
+func extensionCommandRequiresMutation(command string) bool {
+	access := extensionCommandAccess(command)
+	return access == "r/w" || access == "w" || access == "write" || access == "conditional-write"
+}
+
+func extensionCommandAccess(command string) string {
+	for _, ext := range loadExtensions(extensionRoot()).Extensions {
+		for _, contract := range ext.CommandContracts {
+			if contract.Command == command {
+				return strings.TrimSpace(contract.Access)
+			}
+		}
+	}
+	return ""
+}
+
+func cleanConfigRequired(configPath string, command string) bool {
+	switch command {
+	case "config:init", "config:repair", "config:migrate":
 		return false
 	}
+	cfg, path, err := loadConfig(configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s clean-config required before mutation: %s: %v\n", statusLabel("fail"), path, err)
+		return true
+	}
+	for _, requirement := range cfg.Authority.MutationRequires {
+		if strings.TrimSpace(requirement) == "clean-config" {
+			return false
+		}
+	}
+	return false
 }
 
 func hasFlag(args []string, name string) bool {
@@ -1367,14 +1406,18 @@ func hooksInstall(args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	hookBodies := map[string]string{}
 	for _, hook := range []string{"pre-commit", "pre-push"} {
-		body := fmt.Sprintf("#!/usr/bin/env sh\nvigil --allow-mutation hooks:%s \"$@\"\n", hook)
+		body := fmt.Sprintf("#!/usr/bin/env sh\nvigil hooks:%s \"$@\"\n", hook)
 		path := filepath.Join(hookDir, hook)
 		if existing, err := os.ReadFile(path); err == nil && string(existing) != body {
 			fmt.Fprintf(os.Stderr, "%s existing hook differs, refusing to overwrite: %s\n", statusLabel("fail"), path)
 			fmt.Fprintln(os.Stderr, "move, back up, or chain the existing hook before rerunning hooks:install")
 			return 1
 		}
+		hookBodies[path] = body
+	}
+	for path, body := range hookBodies {
 		if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
@@ -1386,7 +1429,7 @@ func hooksInstall(args []string) int {
 
 func hookRun(configPath, hook string, args []string) int {
 	_ = args
-	return workflowLocal(configPath, nil, true)
+	return workflowLocal(configPath, nil, false)
 }
 
 func checkStagedSensitive(args []string) int {
@@ -1632,18 +1675,16 @@ func initCI(configPath string, args []string) int {
 }
 
 func githubWorkflow(cfg config) string {
+	_ = cfg
 	var b strings.Builder
 	b.WriteString("name: Vigil\n\n")
 	b.WriteString("on:\n  pull_request:\n  push:\n    branches: [main]\n\n")
 	b.WriteString("jobs:\n  vigil:\n    runs-on: ubuntu-latest\n    steps:\n")
 	b.WriteString("      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4\n")
 	b.WriteString("      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5\n        with:\n          go-version: '" + goVersionForWorkflow() + "'\n")
-	b.WriteString("      - name: Build Vigil\n        run: |\n          mkdir -p bin\n          go build -o bin/vigil ./cmd/vigil\n          echo \"$PWD/bin\" >> \"$GITHUB_PATH\"\n")
+	b.WriteString("      - name: Install Vigil\n        run: |\n          mkdir -p bin\n          GOBIN=\"$PWD/bin\" go install github.com/PayCal-Technologies/vigil-core/cmd/vigil@" + vigilCoreInstallRef + "\n          echo \"$PWD/bin\" >> \"$GITHUB_PATH\"\n")
 	b.WriteString("      - name: Verify Vigil\n        run: vigil verify --json\n")
-	for _, gate := range cfg.Gates {
-		b.WriteString("      - name: " + yamlScalar(gate.Name) + "\n")
-		b.WriteString("        run: " + yamlScalar(gate.Command) + "\n")
-	}
+	b.WriteString("      - name: Run Vigil Gates\n        run: vigil workflow:local --json\n")
 	return b.String()
 }
 
