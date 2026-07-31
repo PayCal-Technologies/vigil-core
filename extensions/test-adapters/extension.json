@@ -1,0 +1,16 @@
+{
+  "schema_version": "1",
+  "id": "test-adapters",
+  "name": "Test Adapter Extension",
+  "kind": "custom",
+  "status": "public",
+  "private": false,
+  "public_core": true,
+  "description": "Public test history and affected-test helper commands.",
+  "source_root": "extensions/test-adapters",
+  "packages": [],
+  "commands": [
+    "tests:history",
+    "tests:affected"
+  ]
+}

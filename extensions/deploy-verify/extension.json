@@ -1,0 +1,15 @@
+{
+  "schema_version": "1",
+  "id": "deploy-verify",
+  "name": "Deploy Verify Extension",
+  "kind": "custom",
+  "status": "public",
+  "private": false,
+  "public_core": true,
+  "description": "Public endpoint verification adapter for static or service deployments.",
+  "source_root": "extensions/deploy-verify",
+  "packages": [],
+  "commands": [
+    "deploy:verify"
+  ]
+}

@@ -115,8 +115,12 @@ func run(args []string) int {
 		return doctor(*configPath, commandArgs)
 	case "status":
 		return status(*configPath, commandArgs)
+	case "next":
+		return next(*configPath, commandArgs)
 	case "plan":
 		return plan(*configPath, commandArgs)
+	case "explain":
+		return explain(commandArgs)
 	case "workflow:local":
 		return workflowLocal(*configPath, commandArgs)
 	case "verify":
@@ -135,6 +139,14 @@ func run(args []string) int {
 		return checkCommandCatalog(commandArgs)
 	case "checks:public-assumptions":
 		return checkPublicAssumptions(*configPath, commandArgs)
+	case "checks:tracked-assistant-artifacts":
+		return checkTrackedAssistantArtifacts(commandArgs)
+	case "checks:release-policy":
+		if !extensionCommandLoaded(command) {
+			fmt.Fprintf(os.Stderr, "%s is not provided by a valid loaded extension\n", command)
+			return 2
+		}
+		return releasePolicy(commandArgs)
 	case "deps:inventory":
 		return depsInventory(commandArgs)
 	case "support:bundle":
@@ -149,6 +161,16 @@ func run(args []string) int {
 		return validateConfig(*configPath, commandArgs)
 	case "config:repair":
 		return repairConfig(*configPath, commandArgs)
+	case "config:report", "settings:show":
+		return configReport(*configPath, commandArgs)
+	case "config:template":
+		return configTemplate(commandArgs)
+	case "guards:summary":
+		return guardsSummary(commandArgs)
+	case "self-heal:plan":
+		return selfHealPlan(*configPath, commandArgs)
+	case "tools:catalog", "resources:catalog":
+		return catalogCommand(command, commandArgs)
 	case "extensions:list", "extensions:doctor":
 		return extensionCommand(command, commandArgs)
 	case "files:iterate":
@@ -169,7 +191,7 @@ func run(args []string) int {
 			return 2
 		}
 		return accessibilityCommand(command, commandArgs)
-	case "checks:dependency-security", "deps:why", "npm:audit", "composer:validate", "security:gitleaks":
+	case "checks:dependency-security", "deps:why", "npm:audit", "composer:validate", "php:lint", "phpstan:analyse", "security:gitleaks", "javascript:quality":
 		if !extensionCommandLoaded(command) {
 			fmt.Fprintf(os.Stderr, "%s is not provided by a valid loaded extension\n", command)
 			return 2
@@ -181,6 +203,18 @@ func run(args []string) int {
 			return 2
 		}
 		return repoHealth(commandArgs)
+	case "deploy:verify":
+		if !extensionCommandLoaded(command) {
+			fmt.Fprintf(os.Stderr, "%s is not provided by a valid loaded extension\n", command)
+			return 2
+		}
+		return deployVerify(commandArgs)
+	case "tests:history", "tests:affected":
+		if !extensionCommandLoaded(command) {
+			fmt.Fprintf(os.Stderr, "%s is not provided by a valid loaded extension\n", command)
+			return 2
+		}
+		return testsCommand(command, commandArgs)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command %q\n\n", command)
 		printHelp()
@@ -341,6 +375,198 @@ func validationOutput(jsonOut bool, path string, issues []string) int {
 		}
 	}
 	return exit
+}
+
+func configReport(configPath string, args []string) int {
+	jsonOut, err := parseJSONOnly(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
+	cfg, cfgPath, cfgErr := loadConfig(configPath)
+	report := map[string]any{
+		"schema_version": configSchemaVersion,
+		"status":         "ok",
+		"path":           cfgPath,
+		"format":         "json",
+		"discovery":      []string{defaultConfigName, "--config PATH"},
+		"git_root":       redactedPath(gitRoot()),
+		"extensions":     loadExtensions(extensionRoot()),
+		"commands":       activeCommands(),
+	}
+	if cfgErr != nil {
+		report["status"] = "fail"
+		report["error"] = cfgErr.Error()
+	} else {
+		report["config"] = cfg
+		report["issues"] = validateConfigIssues(cfg)
+	}
+	if jsonOut {
+		return printStatusJSON(report, boolExit(report["status"] != "ok"))
+	}
+	fmt.Printf("status=%s\npath=%s\ncommands=%d\nextensions=%d\n", report["status"], cfgPath, len(activeCommands()), loadExtensions(extensionRoot()).Count)
+	return boolExit(report["status"] != "ok")
+}
+
+func configTemplate(args []string) int {
+	fs := flag.NewFlagSet("config:template", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	profile := fs.String("profile", "generic", "profile")
+	jsonOut := fs.Bool("json", false, "json output")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	cfg := templateConfig(*profile)
+	if *jsonOut {
+		return printJSON(map[string]any{"status": "ok", "profile": cfg.Profile, "config": cfg})
+	}
+	data, _ := json.MarshalIndent(cfg, "", "  ")
+	fmt.Println(string(data))
+	return 0
+}
+
+func explain(args []string) int {
+	fs := flag.NewFlagSet("explain", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	jsonOut := fs.Bool("json", false, "json output")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "Usage: vigil explain [--json] <command>")
+		return 2
+	}
+	name := fs.Arg(0)
+	for _, command := range activeCommands() {
+		if command.Command != name {
+			continue
+		}
+		payload := map[string]any{
+			"status":      "ok",
+			"command":     command.Command,
+			"source":      command.Source,
+			"access":      helpAccessMarker(command.Command),
+			"description": command.Description,
+			"usage":       "vigil " + command.Command + " [args]",
+		}
+		if *jsonOut {
+			return printJSON(payload)
+		}
+		fmt.Printf("%s\nsource=%s\naccess=%s\nusage=%s\n%s\n", command.Command, command.Source, helpAccessMarker(command.Command), payload["usage"], command.Description)
+		return 0
+	}
+	fmt.Fprintf(os.Stderr, "unknown command: %s\n", name)
+	return 1
+}
+
+func catalogCommand(command string, args []string) int {
+	jsonOut, err := parseJSONOnly(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
+	payload := map[string]any{"status": "ok"}
+	if command == "tools:catalog" {
+		payload["tools"] = activeCommands()
+	} else {
+		payload["resources"] = []map[string]string{
+			{"uri": "vigil://config/report", "description": "Effective public config report"},
+			{"uri": "vigil://commands/catalog", "description": "Loaded public command catalog"},
+			{"uri": "vigil://extensions/catalog", "description": "Loaded public extension manifests"},
+			{"uri": "vigil://support/dry-run", "description": "Preview support bundle payload"},
+		}
+	}
+	if jsonOut {
+		return printJSON(payload)
+	}
+	if command == "tools:catalog" {
+		for _, info := range activeCommands() {
+			fmt.Printf("%s\t%s\t%s\n", info.Command, info.Source, info.Description)
+		}
+		return 0
+	}
+	for _, resource := range payload["resources"].([]map[string]string) {
+		fmt.Printf("%s\t%s\n", resource["uri"], resource["description"])
+	}
+	return 0
+}
+
+func guardsSummary(args []string) int {
+	jsonOut, err := parseJSONOnly(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
+	readOnly := []string{}
+	mutating := []string{}
+	for _, command := range activeCommands() {
+		if helpAccessMarker(command.Command) == "r" {
+			readOnly = append(readOnly, command.Command)
+		} else {
+			mutating = append(mutating, command.Command)
+		}
+	}
+	payload := map[string]any{"status": "ok", "read_only": readOnly, "mutating": mutating, "read_only_count": len(readOnly), "mutating_count": len(mutating), "confirmation": "mutating commands require explicit human or CI intent"}
+	if jsonOut {
+		return printJSON(payload)
+	}
+	fmt.Printf("%s read=%d write=%d\n", statusLabel("ok"), len(readOnly), len(mutating))
+	return 0
+}
+
+func selfHealPlan(configPath string, args []string) int {
+	jsonOut, err := parseJSONOnly(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
+	actions := []map[string]string{}
+	if _, _, err := loadConfig(configPath); err != nil {
+		actions = append(actions, map[string]string{"action": "repair config", "command": "vigil config:repair", "risk": "writes config only after confirmation"})
+	}
+	ext := loadExtensions(extensionRoot())
+	if ext.Status != "ok" {
+		actions = append(actions, map[string]string{"action": "inspect extensions", "command": "vigil extensions:doctor", "risk": "read-only"})
+	}
+	if gitRoot() == "" {
+		actions = append(actions, map[string]string{"action": "run inside git checkout", "command": "git status", "risk": "read-only"})
+	}
+	payload := map[string]any{"status": okFail(0), "actions": actions, "count": len(actions)}
+	if jsonOut {
+		return printJSON(payload)
+	}
+	if len(actions) == 0 {
+		fmt.Printf("%s no self-heal actions needed\n", statusLabel("ok"))
+		return 0
+	}
+	for _, action := range actions {
+		fmt.Printf("%s\t%s\n", action["action"], action["command"])
+	}
+	return 0
+}
+
+func next(configPath string, args []string) int {
+	jsonOut, err := parseJSONOnly(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
+	recommendations := []string{}
+	if _, _, err := loadConfig(configPath); err != nil {
+		recommendations = append(recommendations, "vigil config:repair")
+	}
+	if loadExtensions(extensionRoot()).Status != "ok" {
+		recommendations = append(recommendations, "vigil extensions:doctor")
+	}
+	recommendations = append(recommendations, "vigil verify --json")
+	payload := map[string]any{"status": "ok", "recommendations": uniqueStrings(recommendations)}
+	if jsonOut {
+		return printJSON(payload)
+	}
+	for _, rec := range uniqueStrings(recommendations) {
+		fmt.Println(rec)
+	}
+	return 0
 }
 
 func repairConfig(configPath string, args []string) int {
@@ -520,23 +746,33 @@ func activeCommands() []commandInfo {
 		{Command: "checks:command-catalog", Source: "core", Description: "Audit the active command catalog for duplicate or malformed entries."},
 		{Command: "checks:public-assumptions", Source: "core", Description: "Scan public Vigil source for product-specific assumptions and reserved category leaks."},
 		{Command: "checks:staged-sensitive", Source: "core", Description: "Scan staged files for common secret patterns before commit."},
+		{Command: "checks:tracked-assistant-artifacts", Source: "core", Description: "Detect tracked local AI/editor instruction artifacts."},
 		{Command: "checks:workspace-hygiene", Source: "core", Description: "Detect local OS, editor, backup, and temporary artifacts."},
 		{Command: "config:schema", Source: "core", Description: "Print the supported JSON config schema summary."},
 		{Command: "config:init", Source: "core", Description: "Generate or write a starter JSON config."},
 		{Command: "config:validate", Source: "core", Description: "Validate the effective JSON config."},
 		{Command: "config:repair", Source: "core", Description: "Interactively repair missing or broken Vigil JSON config fields."},
+		{Command: "config:report", Source: "core", Description: "Report effective redacted Vigil configuration and discovery details."},
+		{Command: "config:template", Source: "core", Description: "Print a versioned starter config for a selected profile."},
 		{Command: "completion", Source: "core", Description: "Generate shell completion for bash, zsh, or fish."},
 		{Command: "deps:inventory", Source: "core", Description: "Inventory common dependency manifests and lockfiles."},
 		{Command: "doctor", Source: "core", Description: "Check local readiness for using Vigil Core in CI/CD workflows."},
+		{Command: "explain", Source: "core", Description: "Explain a command's source, access, and usage."},
 		{Command: "extensions:list", Source: "core", Description: "List loaded extension manifests."},
 		{Command: "extensions:doctor", Source: "core", Description: "Validate loaded extension manifests."},
+		{Command: "guards:summary", Source: "core", Description: "Summarize read-only and mutating command coverage."},
 		{Command: "hooks:install", Source: "core", Description: "Install Vigil git hook shims into the current repository."},
 		{Command: "hooks:pre-commit", Source: "core", Description: "Run pre-commit gates from Vigil config."},
 		{Command: "hooks:pre-push", Source: "core", Description: "Run pre-push gates from Vigil config."},
 		{Command: "list", Source: "core", Description: "List core and loaded extension commands."},
+		{Command: "next", Source: "core", Description: "Prioritize next local setup and verification actions."},
 		{Command: "plan", Source: "core", Description: "Explain which configured gates Vigil would run."},
+		{Command: "resources:catalog", Source: "core", Description: "List public local diagnostic resources."},
+		{Command: "self-heal:plan", Source: "core", Description: "Suggest safe repairs for local configuration and setup."},
+		{Command: "settings:show", Source: "core", Description: "Alias for config:report."},
 		{Command: "status", Source: "core", Description: "Summarize config, extension, git, and command readiness."},
 		{Command: "support:bundle", Source: "core", Description: "Write or preview a redacted local diagnostic bundle."},
+		{Command: "tools:catalog", Source: "core", Description: "List public tools and command contracts."},
 		{Command: "verify", Source: "core", Description: "Run the public readiness proof set."},
 		{Command: "version", Source: "core", Description: "Print Vigil Core version metadata."},
 		{Command: "workflow:local", Source: "core", Description: "Run configured local CI/CD gates with optional dry-run."},
@@ -559,14 +795,21 @@ func extensionCommandDescription(command, fallback string) string {
 		"a11y:playwright":            "Run Playwright accessibility tests.",
 		"a11y:smoke":                 "Run fast public accessibility smoke checks.",
 		"checks:dependency-security": "Run public dependency and scanner adapters.",
+		"checks:release-policy":      "Check generic release readiness.",
 		"composer:validate":          "Run Composer manifest validation.",
+		"deploy:verify":              "Verify a configured public endpoint.",
 		"deps:why":                   "Find package references in known manifests.",
 		"history:diagnose":           "Alias for repo:health.",
+		"javascript:quality":         "Run public JavaScript quality adapters.",
 		"npm:audit":                  "Run npm audit.",
+		"php:lint":                   "Run PHP syntax checks.",
+		"phpstan:analyse":            "Run PHPStan analysis.",
 		"readme:check":               "Check Scribe managed README block freshness.",
 		"readme:generate":            "Generate Scribe managed README block.",
 		"repo:health":                "Report lightweight git-history diagnostics.",
 		"security:gitleaks":          "Run local secret scanner.",
+		"tests:affected":             "List likely test files for changed files.",
+		"tests:history":              "Summarize JUnit test history.",
 	}
 	if description, ok := descriptions[command]; ok {
 		return description
@@ -901,6 +1144,32 @@ func checkWorkspaceHygiene(args []string) int {
 		return nil
 	})
 	return findingsOutput(jsonOut, "workspace_hygiene", findings)
+}
+
+func checkTrackedAssistantArtifacts(args []string) int {
+	jsonOut, err := parseJSONOnly(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(`(^|/)\.cursor($|/)`),
+		regexp.MustCompile(`(^|/)\.continue($|/)`),
+		regexp.MustCompile(`(^|/)\.windsurf($|/)`),
+		regexp.MustCompile(`(^|/)CLAUDE\.md$`),
+		regexp.MustCompile(`(^|/)AGENTS\.local\.md$`),
+		regexp.MustCompile(`(^|/)\.codex($|/)`),
+	}
+	var findings []string
+	for _, file := range gitLines("ls-files") {
+		for _, pattern := range patterns {
+			if pattern.MatchString(file) {
+				findings = append(findings, file)
+				break
+			}
+		}
+	}
+	return findingsOutput(jsonOut, "tracked_assistant_artifacts", findings)
 }
 
 func checkCommandCatalog(args []string) int {
@@ -1336,11 +1605,56 @@ func adapterCommand(command string, args []string) int {
 		return runAdapterCommand("npm:audit", "npm", append([]string{"audit"}, args...)...)
 	case "composer:validate":
 		return runAdapterCommand("composer:validate", "composer", append([]string{"validate"}, args...)...)
+	case "php:lint":
+		return phpLint(args)
+	case "phpstan:analyse":
+		return runAdapterCommand("phpstan:analyse", "phpstan", args...)
+	case "javascript:quality":
+		return javascriptQuality(args)
 	case "security:gitleaks":
 		return runAdapterCommand("security:gitleaks", "gitleaks", append([]string{"detect"}, args...)...)
 	default:
 		return 2
 	}
+}
+
+func javascriptQuality(args []string) int {
+	jsonOut, err := parseJSONOnly(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
+	var checks []checkResult
+	if !fileExists("package.json") {
+		checks = append(checks, checkResult{Name: "javascript:quality", Status: "warn", Detail: "package.json not found"})
+		return checksOutput(jsonOut, "javascript_quality", checks)
+	}
+	checks = append(checks, runExternalIfAvailable("npm:test", "npm", "test", "--", "--runInBand"))
+	checks = append(checks, runExternalIfAvailable("npm:audit", "npm", "audit", "--audit-level=moderate"))
+	return checksOutput(jsonOut, "javascript_quality", checks)
+}
+
+func phpLint(args []string) int {
+	jsonOut, err := parseJSONOnly(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
+	files := trackedFilesBySuffix(".php")
+	if len(files) == 0 {
+		return checksOutput(jsonOut, "php_lint", []checkResult{{Name: "php:lint", Status: "warn", Detail: "no tracked PHP files"}})
+	}
+	if _, err := exec.LookPath("php"); err != nil {
+		return checksOutput(jsonOut, "php_lint", []checkResult{{Name: "php:lint", Status: "warn", Detail: "php not found"}})
+	}
+	var checks []checkResult
+	for _, file := range files {
+		checks = append(checks, runExternalCheck(file, "php", "-l", file))
+		if len(checks) >= 25 {
+			break
+		}
+	}
+	return checksOutput(jsonOut, "php_lint", checks)
 }
 
 func dependencySecurity(args []string) int {
@@ -1494,6 +1808,121 @@ func repoHealth(args []string) int {
 	return 0
 }
 
+func releasePolicy(args []string) int {
+	jsonOut, err := parseJSONOnly(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
+	checks := []checkResult{}
+	if gitRoot() == "" {
+		checks = append(checks, checkResult{Name: "git", Status: "fail", Detail: "not inside git repository"})
+	} else if len(gitLines("status", "--short")) > 0 {
+		checks = append(checks, checkResult{Name: "clean_tree", Status: "fail", Detail: "working tree has changes"})
+	} else {
+		checks = append(checks, checkResult{Name: "clean_tree", Status: "ok", Detail: "clean"})
+	}
+	if len(existingFiles([]string{"VERSION", "package.json", "composer.json", "go.mod"})) == 0 {
+		checks = append(checks, checkResult{Name: "version_source", Status: "warn", Detail: "no common version source found"})
+	} else {
+		checks = append(checks, checkResult{Name: "version_source", Status: "ok", Detail: strings.Join(existingFiles([]string{"VERSION", "package.json", "composer.json", "go.mod"}), ", ")})
+	}
+	return checksOutput(jsonOut, "release_policy", checks)
+}
+
+func deployVerify(args []string) int {
+	fs := flag.NewFlagSet("deploy:verify", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	url := fs.String("url", "", "endpoint URL")
+	jsonOut := fs.Bool("json", false, "json output")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	checks := []checkResult{}
+	if strings.TrimSpace(*url) == "" {
+		checks = append(checks, checkResult{Name: "url", Status: "warn", Detail: "provide --url to verify an endpoint"})
+		return checksOutput(*jsonOut, "deploy_verify", checks)
+	}
+	if _, err := exec.LookPath("curl"); err != nil {
+		checks = append(checks, checkResult{Name: "curl", Status: "warn", Detail: "curl not found"})
+		return checksOutput(*jsonOut, "deploy_verify", checks)
+	}
+	checks = append(checks, runExternalCheck("endpoint", "curl", "-fsSIL", "--max-time", "10", *url))
+	return checksOutput(*jsonOut, "deploy_verify", checks)
+}
+
+func testsCommand(command string, args []string) int {
+	switch command {
+	case "tests:history":
+		return testsHistory(args)
+	case "tests:affected":
+		return testsAffected(args)
+	default:
+		return 2
+	}
+}
+
+func testsHistory(args []string) int {
+	jsonOut, err := parseJSONOnly(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
+	files := []string{}
+	_ = filepath.WalkDir(".", func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if entry.IsDir() && (entry.Name() == ".git" || entry.Name() == "bin" || entry.Name() == "tmp") {
+			return filepath.SkipDir
+		}
+		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".xml") || strings.HasSuffix(entry.Name(), ".junit")) && strings.Contains(strings.ToLower(path), "junit") {
+			files = append(files, path)
+		}
+		return nil
+	})
+	sort.Strings(files)
+	if jsonOut {
+		return printJSON(map[string]any{"status": "ok", "files": files, "count": len(files)})
+	}
+	for _, file := range files {
+		fmt.Println(file)
+	}
+	if len(files) == 0 {
+		fmt.Printf("%s no JUnit history files found\n", statusLabel("warn"))
+	}
+	return 0
+}
+
+func testsAffected(args []string) int {
+	jsonOut, err := parseJSONOnly(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
+	changed := append(gitLines("diff", "--name-only", "HEAD"), gitLines("diff", "--cached", "--name-only")...)
+	tests := map[string]bool{}
+	for _, file := range changed {
+		base := strings.TrimSuffix(filepath.Base(file), filepath.Ext(file))
+		for _, dir := range existingTestPaths() {
+			_ = filepath.WalkDir(dir, func(path string, entry os.DirEntry, err error) error {
+				if err == nil && !entry.IsDir() && strings.Contains(strings.ToLower(filepath.Base(path)), strings.ToLower(base)) {
+					tests[path] = true
+				}
+				return nil
+			})
+		}
+	}
+	out := mapKeys(tests)
+	if jsonOut {
+		return printJSON(map[string]any{"status": "ok", "tests": out, "count": len(out)})
+	}
+	for _, file := range out {
+		fmt.Println(file)
+	}
+	return 0
+}
+
 type countItem struct {
 	Name  string `json:"name"`
 	Count int    `json:"count"`
@@ -1533,6 +1962,46 @@ func trimOneLine(output string) string {
 		return output[:160] + "..."
 	}
 	return output
+}
+
+func trackedFilesBySuffix(suffix string) []string {
+	var out []string
+	for _, file := range gitLines("ls-files") {
+		if strings.HasSuffix(file, suffix) {
+			out = append(out, file)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func mapKeys(values map[string]bool) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func uniqueStrings(values []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, value := range values {
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
+}
+
+func redactedPath(path string) string {
+	if strings.TrimSpace(path) == "" {
+		return ""
+	}
+	return filepath.Base(path)
 }
 
 func matchFileGlob(pattern, rel string) (bool, error) {

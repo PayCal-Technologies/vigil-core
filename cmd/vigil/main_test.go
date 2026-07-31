@@ -22,8 +22,24 @@ func TestActiveCommandsIncludePublicCICD(t *testing.T) {
 		"readme:check",
 		"a11y:inventory",
 		"checks:dependency-security",
+		"checks:release-policy",
+		"checks:tracked-assistant-artifacts",
 		"security:gitleaks",
 		"repo:health",
+		"config:report",
+		"config:template",
+		"explain",
+		"guards:summary",
+		"self-heal:plan",
+		"next",
+		"tools:catalog",
+		"resources:catalog",
+		"deploy:verify",
+		"tests:history",
+		"tests:affected",
+		"javascript:quality",
+		"php:lint",
+		"phpstan:analyse",
 	} {
 		if !commands[want] {
 			t.Fatalf("active command %s missing", want)
@@ -97,5 +113,18 @@ func TestScribeReadmeRenderIsStable(t *testing.T) {
 	}
 	if next != again {
 		t.Fatal("stable Scribe render changed content")
+	}
+}
+
+func TestUniqueStringsPreservesOrder(t *testing.T) {
+	got := uniqueStrings([]string{"a", "b", "a", "", "c"})
+	want := []string{"a", "b", "c"}
+	if len(got) != len(want) {
+		t.Fatalf("uniqueStrings length = %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("uniqueStrings[%d] = %s, want %s", i, got[i], want[i])
+		}
 	}
 }

@@ -30,7 +30,10 @@ contracts:
 
 - `a11y-adapters`
 - `dependency-adapters`
+- `deploy-verify`
 - `file-iterator`
+- `release-policy`
 - `repo-health`
 - `scribe`
 - `security-adapters`
+- `test-adapters`

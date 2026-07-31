@@ -1,0 +1,15 @@
+{
+  "schema_version": "1",
+  "id": "release-policy",
+  "name": "Release Policy Extension",
+  "kind": "custom",
+  "status": "public",
+  "private": false,
+  "public_core": true,
+  "description": "Public release readiness checks for clean trees and version sources.",
+  "source_root": "extensions/release-policy",
+  "packages": [],
+  "commands": [
+    "checks:release-policy"
+  ]
+}

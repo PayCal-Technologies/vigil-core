@@ -9,4 +9,7 @@ vigil deps:why react
 vigil checks:dependency-security --json
 vigil npm:audit
 vigil composer:validate
+vigil php:lint --json
+vigil phpstan:analyse
+vigil javascript:quality --json
 ```

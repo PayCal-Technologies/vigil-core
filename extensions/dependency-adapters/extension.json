@@ -13,6 +13,9 @@
     "checks:dependency-security",
     "deps:why",
     "npm:audit",
-    "composer:validate"
+    "composer:validate",
+    "php:lint",
+    "phpstan:analyse",
+    "javascript:quality"
   ]
 }
