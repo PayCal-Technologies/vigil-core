@@ -26,7 +26,11 @@ func TestActiveCommandsIncludePublicCICD(t *testing.T) {
 }
 
 func TestPublicAssumptionScanIsClean(t *testing.T) {
-	if findings := publicAssumptionFindings(); len(findings) != 0 {
+	findings, err := publicAssumptionFindings("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 0 {
 		t.Fatalf("public assumption findings: %#v", findings)
 	}
 }

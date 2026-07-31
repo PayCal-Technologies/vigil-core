@@ -50,5 +50,13 @@
       "custom"
     ],
     "require_private": false
-  }
+  },
+  "public_assumption_patterns": [
+    "/[A-Za-z0-9._-]+/var/www/[A-Za-z0-9._-]+",
+    "/Users/[A-Za-z0-9._-]+/",
+    "(?i)[A-Za-z0-9._-]+-private",
+    "(?i)private-[A-Za-z0-9._-]+",
+    "(?i)company-internal",
+    "(?i)customer-specific"
+  ]
 }

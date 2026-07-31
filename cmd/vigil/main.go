@@ -22,13 +22,14 @@ const (
 )
 
 type config struct {
-	SchemaVersion string            `json:"schema_version"`
-	Profile       string            `json:"profile"`
-	Project       string            `json:"project"`
-	Authority     authorityConfig   `json:"authority"`
-	Gates         []gateConfig      `json:"gates"`
-	Extensions    extensionsConfig  `json:"extensions"`
-	Metadata      map[string]string `json:"metadata,omitempty"`
+	SchemaVersion            string            `json:"schema_version"`
+	Profile                  string            `json:"profile"`
+	Project                  string            `json:"project"`
+	Authority                authorityConfig   `json:"authority"`
+	Gates                    []gateConfig      `json:"gates"`
+	Extensions               extensionsConfig  `json:"extensions"`
+	PublicAssumptionPatterns []string          `json:"public_assumption_patterns,omitempty"`
+	Metadata                 map[string]string `json:"metadata,omitempty"`
 }
 
 type authorityConfig struct {
@@ -124,7 +125,7 @@ func run(args []string) int {
 	case "checks:command-catalog":
 		return checkCommandCatalog(commandArgs)
 	case "checks:public-assumptions":
-		return checkPublicAssumptions(commandArgs)
+		return checkPublicAssumptions(*configPath, commandArgs)
 	case "deps:inventory":
 		return depsInventory(commandArgs)
 	case "support:bundle":
@@ -556,8 +557,12 @@ func verify(configPath string, args []string) int {
 	checks = append(checks, checkResult{Name: "extensions:doctor", Status: ext.Status, Detail: fmt.Sprintf("%d extension(s)", ext.Count)})
 	catalogIssues := commandCatalogIssues()
 	checks = append(checks, checkResult{Name: "checks:command-catalog", Status: okFail(len(catalogIssues)), Detail: fmt.Sprintf("%d issue(s)", len(catalogIssues))})
-	assumptions := publicAssumptionFindings()
-	checks = append(checks, checkResult{Name: "checks:public-assumptions", Status: okFail(len(assumptions)), Detail: fmt.Sprintf("%d finding(s)", len(assumptions))})
+	assumptions, assumptionErr := publicAssumptionFindings(configPath)
+	if assumptionErr != nil {
+		checks = append(checks, checkResult{Name: "checks:public-assumptions", Status: "fail", Detail: assumptionErr.Error()})
+	} else {
+		checks = append(checks, checkResult{Name: "checks:public-assumptions", Status: okFail(len(assumptions)), Detail: fmt.Sprintf("%d finding(s)", len(assumptions))})
+	}
 	status, failures := summarizeChecks(checks)
 	if jsonOut {
 		return printStatusJSON(map[string]any{"status": status, "checks": checks}, failures)
@@ -684,37 +689,46 @@ func commandCatalogIssues() []string {
 	return issues
 }
 
-func checkPublicAssumptions(args []string) int {
+func checkPublicAssumptions(configPath string, args []string) int {
 	jsonOut, err := parseJSONOnly(args)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 2
 	}
-	findings := publicAssumptionFindings()
+	findings, err := publicAssumptionFindings(configPath)
+	if err != nil {
+		if jsonOut {
+			return printStatusJSON(map[string]any{"status": "fail", "check": "public_assumptions", "error": err.Error()}, 1)
+		}
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
 	return findingsOutput(jsonOut, "public_assumptions", findings)
 }
 
-func publicAssumptionFindings() []string {
-	terms := []string{
-		"paycal" + "-private",
-		"/private" + "/var",
-		"so" + "c\\s*2",
-		"so" + "c2",
-		"red" + "is",
-		"led" + "ger",
-		"m" + "cp",
-		"mo" + "at",
-		"github\\.com/vigil-ci" + "/vigil",
-		"internal/(so" + "c2|led" + "ger|red" + "is|red" + "isaudit|red" + "isclient|m" + "cp|agent" + "meta|red" + "act|connection" + "audit)",
-		"so" + "c2:",
-		"led" + "ger:",
-		"m" + "cp:smoke",
-		"sync:red" + "is",
-		"migrate:red" + "is",
-		"business:connect" + "ions",
-		"user:connect" + "ions",
+func publicAssumptionFindings(configPath string) ([]string, error) {
+	cfg, cfgPath, err := loadConfig(configPath)
+	if err != nil {
+		return nil, err
 	}
-	deny := regexp.MustCompile("(?i)(" + strings.Join(terms, "|") + ")")
+	patterns := append([]string{}, cfg.PublicAssumptionPatterns...)
+	for _, term := range strings.Split(os.Getenv("VIGIL_PUBLIC_ASSUMPTION_DENY"), ",") {
+		term = strings.TrimSpace(term)
+		if term != "" {
+			patterns = append(patterns, regexp.QuoteMeta(term))
+		}
+	}
+	if len(patterns) == 0 {
+		return nil, nil
+	}
+	compiled := make([]*regexp.Regexp, 0, len(patterns))
+	for _, pattern := range patterns {
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			return nil, fmt.Errorf("invalid public_assumption_patterns entry %q: %w", pattern, err)
+		}
+		compiled = append(compiled, re)
+	}
 	var findings []string
 	_ = filepath.WalkDir(".", func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
@@ -723,17 +737,23 @@ func publicAssumptionFindings() []string {
 		if entry.IsDir() && (entry.Name() == ".git" || entry.Name() == "bin" || entry.Name() == "tmp") {
 			return filepath.SkipDir
 		}
-		if entry.IsDir() || strings.HasSuffix(path, ".sum") {
+		if entry.IsDir() || strings.HasSuffix(path, ".sum") || samePath(path, cfgPath) {
 			return nil
 		}
 		data, err := os.ReadFile(path)
-		if err == nil && deny.Match(data) {
-			findings = append(findings, path)
+		if err != nil {
+			return nil
+		}
+		for _, re := range compiled {
+			if re.Match(data) {
+				findings = append(findings, path)
+				break
+			}
 		}
 		return nil
 	})
 	sort.Strings(findings)
-	return findings
+	return findings, nil
 }
 
 func depsInventory(args []string) int {
@@ -1045,6 +1065,11 @@ func validateStruct(cfg config) error {
 	if cfg.Extensions.Enabled && strings.TrimSpace(cfg.Extensions.ManifestRoot) == "" {
 		issues = append(issues, "extensions.manifest_root is required when extensions are enabled")
 	}
+	for i, pattern := range cfg.PublicAssumptionPatterns {
+		if _, err := regexp.Compile(pattern); err != nil {
+			issues = append(issues, fmt.Sprintf("public_assumption_patterns[%d] is invalid: %v", i, err))
+		}
+	}
 	if len(issues) > 0 {
 		return errors.New(strings.Join(issues, "; "))
 	}
@@ -1182,6 +1207,18 @@ func findingsOutput(jsonOut bool, name string, findings []string) int {
 	return 1
 }
 
+func samePath(path, other string) bool {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return path == other
+	}
+	absOther, err := filepath.Abs(other)
+	if err != nil {
+		return path == other
+	}
+	return absPath == absOther
+}
+
 func parseJSONOnly(args []string) (bool, error) {
 	jsonOut := false
 	for _, arg := range args {
@@ -1199,12 +1236,30 @@ func resolvedConfigPath(path string) string {
 	if strings.TrimSpace(path) != "" {
 		return path
 	}
+	if found := findFileUpward(mustGetwd(), defaultConfigName); found != "" {
+		return found
+	}
 	return defaultConfigName
 }
 
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+func findFileUpward(start, name string) string {
+	dir := filepath.Clean(start)
+	for {
+		candidate := filepath.Join(dir, name)
+		if fileExists(candidate) {
+			return candidate
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
 }
 
 func mustGetwd() string {
