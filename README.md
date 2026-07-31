@@ -154,6 +154,26 @@ vigil extensions:list
 vigil files:iterate --root=. --glob='**/*.go' --jsonl
 ```
 
+## Scribe
+
+Scribe is Vigil's README automation pattern: a repo can keep human-authored
+README sections intact while a managed block is generated from stable project
+signals such as version files, package metadata, source roots, docs, tests, and
+registered commands.
+
+In Vigil Core, Scribe-style documentation checks can be represented as normal
+config gates or provided by an extension. That keeps README freshness inside the
+same local-first CI/CD workflow as tests, diagnostics, and hook checks.
+
+```json
+{
+  "name": "readme freshness",
+  "command": "vigil readme:check",
+  "read_only": true,
+  "tags": ["docs"]
+}
+```
+
 ## Ethos
 
 Vigil treats automation as an accountable system. It should make authority,
