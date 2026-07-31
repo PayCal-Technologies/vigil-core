@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestActiveCommandsIncludePublicCICD(t *testing.T) {
 	commands := map[string]bool{}
@@ -18,6 +21,7 @@ func TestActiveCommandsIncludePublicCICD(t *testing.T) {
 		"checks:public-assumptions",
 		"checks:command-catalog",
 		"files:iterate",
+		"checks:public-parity",
 		"readme:generate",
 		"readme:check",
 		"a11y:inventory",
@@ -27,8 +31,11 @@ func TestActiveCommandsIncludePublicCICD(t *testing.T) {
 		"security:gitleaks",
 		"repo:health",
 		"config:report",
+		"config:migrate",
 		"config:template",
 		"explain",
+		"init:ci",
+		"github:init-ci",
 		"guards:summary",
 		"self-heal:plan",
 		"next",
@@ -44,6 +51,27 @@ func TestActiveCommandsIncludePublicCICD(t *testing.T) {
 		if !commands[want] {
 			t.Fatalf("active command %s missing", want)
 		}
+	}
+}
+
+func TestManualForExtensionCommandUsesContract(t *testing.T) {
+	manual, ok := manualForCommand("github:init-ci")
+	if !ok {
+		t.Fatal("github:init-ci manual missing")
+	}
+	if manual.Usage != "vigil github:init-ci [--write] [--json]" {
+		t.Fatalf("unexpected usage: %s", manual.Usage)
+	}
+	if manual.Access != "r/w" {
+		t.Fatalf("unexpected access: %s", manual.Access)
+	}
+}
+
+func TestGithubWorkflowIncludesConfiguredGates(t *testing.T) {
+	cfg := templateConfig("generic")
+	out := githubWorkflow(cfg)
+	if !strings.Contains(out, "vigil verify --json") || !strings.Contains(out, "git status --short") {
+		t.Fatalf("workflow missing expected commands:\n%s", out)
 	}
 }
 

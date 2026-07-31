@@ -1,0 +1,19 @@
+name: Vigil
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  vigil:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Install Vigil
+        run: go install github.com/PayCal-Technologies/vigil-core/cmd/vigil@latest
+      - name: Verify
+        run: vigil verify --json

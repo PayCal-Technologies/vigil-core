@@ -1,0 +1,27 @@
+{
+  "schema_version": "1",
+  "id": "github-cicd",
+  "name": "GitHub CI/CD Extension",
+  "kind": "custom",
+  "status": "public",
+  "private": false,
+  "public_core": true,
+  "description": "Canonical public GitHub Actions extension for running Vigil in CI/CD.",
+  "source_root": "extensions/github-cicd",
+  "packages": [],
+  "commands": [
+    "github:init-ci"
+  ],
+  "command_contracts": [
+    {
+      "command": "github:init-ci",
+      "access": "r/w",
+      "usage": "vigil github:init-ci [--write] [--json]",
+      "description": "Generate a GitHub Actions workflow from Vigil gates.",
+      "examples": [
+        "vigil github:init-ci",
+        "vigil github:init-ci --write"
+      ]
+    }
+  ]
+}

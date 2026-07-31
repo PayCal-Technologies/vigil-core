@@ -11,5 +11,14 @@
   "packages": [],
   "commands": [
     "security:gitleaks"
+  ],
+  "command_contracts": [
+    {
+      "command": "security:gitleaks",
+      "access": "r",
+      "usage": "vigil security:gitleaks [args]",
+      "description": "Run local secret scanner.",
+      "install_hint": "brew install gitleaks"
+    }
   ]
 }

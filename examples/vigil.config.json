@@ -1,0 +1,44 @@
+{
+  "schema_version": "1",
+  "profile": "go-tool",
+  "project": "example-vigil-project",
+  "authority": {
+    "local_first": true,
+    "mutation_requires": [
+      "explicit-confirmation",
+      "clean-config"
+    ]
+  },
+  "gates": [
+    {
+      "name": "go test",
+      "command": "go test ./...",
+      "read_only": true,
+      "tags": [
+        "test"
+      ]
+    },
+    {
+      "name": "vigil verify",
+      "command": "vigil verify --json",
+      "read_only": true,
+      "tags": [
+        "vigil"
+      ]
+    }
+  ],
+  "extensions": {
+    "enabled": true,
+    "manifest_root": "extensions",
+    "allowed_kinds": [
+      "custom"
+    ],
+    "enabled_ids": [
+      "scribe",
+      "repo-health",
+      "github-cicd"
+    ],
+    "disabled_ids": [],
+    "require_private": false
+  }
+}

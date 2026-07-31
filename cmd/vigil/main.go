@@ -51,6 +51,8 @@ type extensionsConfig struct {
 	Enabled        bool     `json:"enabled"`
 	ManifestRoot   string   `json:"manifest_root"`
 	AllowedKinds   []string `json:"allowed_kinds"`
+	EnabledIDs     []string `json:"enabled_ids,omitempty"`
+	DisabledIDs    []string `json:"disabled_ids,omitempty"`
 	RequirePrivate bool     `json:"require_private"`
 }
 
@@ -61,18 +63,28 @@ type configIssue struct {
 }
 
 type extensionManifest struct {
-	SchemaVersion string   `json:"schema_version"`
-	ID            string   `json:"id"`
-	Name          string   `json:"name"`
-	Kind          string   `json:"kind"`
-	Status        string   `json:"status"`
-	Private       bool     `json:"private"`
-	PublicCore    bool     `json:"public_core"`
-	Description   string   `json:"description"`
-	SourceRoot    string   `json:"source_root"`
-	Packages      []string `json:"packages"`
-	Commands      []string `json:"commands"`
-	Path          string   `json:"path,omitempty"`
+	SchemaVersion    string                     `json:"schema_version"`
+	ID               string                     `json:"id"`
+	Name             string                     `json:"name"`
+	Kind             string                     `json:"kind"`
+	Status           string                     `json:"status"`
+	Private          bool                       `json:"private"`
+	PublicCore       bool                       `json:"public_core"`
+	Description      string                     `json:"description"`
+	SourceRoot       string                     `json:"source_root"`
+	Packages         []string                   `json:"packages"`
+	Commands         []string                   `json:"commands"`
+	CommandContracts []extensionCommandContract `json:"command_contracts,omitempty"`
+	Path             string                     `json:"path,omitempty"`
+}
+
+type extensionCommandContract struct {
+	Command     string   `json:"command"`
+	Access      string   `json:"access"`
+	Usage       string   `json:"usage"`
+	Description string   `json:"description"`
+	Examples    []string `json:"examples,omitempty"`
+	InstallHint string   `json:"install_hint,omitempty"`
 }
 
 type extensionReport struct {
@@ -95,6 +107,9 @@ func run(args []string) int {
 	if err := global.Parse(args); err != nil {
 		return 2
 	}
+	if strings.TrimSpace(*configPath) != "" {
+		_ = os.Setenv("VIGIL_CONFIG", *configPath)
+	}
 	rest := global.Args()
 	if len(rest) == 0 {
 		printHelp()
@@ -104,6 +119,9 @@ func run(args []string) int {
 	commandArgs := rest[1:]
 	switch command {
 	case "help", "--help", "-h":
+		if len(commandArgs) > 0 {
+			return commandHelp(commandArgs)
+		}
 		printHelp()
 		return 0
 	case "list", "commands":
@@ -139,6 +157,8 @@ func run(args []string) int {
 		return checkCommandCatalog(commandArgs)
 	case "checks:public-assumptions":
 		return checkPublicAssumptions(*configPath, commandArgs)
+	case "checks:public-parity":
+		return checkPublicParity(*configPath, commandArgs)
 	case "checks:tracked-assistant-artifacts":
 		return checkTrackedAssistantArtifacts(commandArgs)
 	case "checks:release-policy":
@@ -153,6 +173,14 @@ func run(args []string) int {
 		return supportBundle(*configPath, commandArgs)
 	case "completion":
 		return completion(commandArgs)
+	case "init:ci":
+		return initCI(*configPath, commandArgs)
+	case "github:init-ci":
+		if !extensionCommandLoaded(command) {
+			fmt.Fprintf(os.Stderr, "%s is not provided by a valid loaded extension\n", command)
+			return 2
+		}
+		return initCI(*configPath, append([]string{"--provider=github"}, commandArgs...))
 	case "config:schema":
 		return printConfigSchema(commandArgs)
 	case "config:init":
@@ -161,6 +189,8 @@ func run(args []string) int {
 		return validateConfig(*configPath, commandArgs)
 	case "config:repair":
 		return repairConfig(*configPath, commandArgs)
+	case "config:migrate":
+		return configMigrate(*configPath, commandArgs)
 	case "config:report", "settings:show":
 		return configReport(*configPath, commandArgs)
 	case "config:template":
@@ -242,9 +272,75 @@ func printHelp() {
 }
 
 type commandInfo struct {
-	Command     string `json:"command"`
-	Source      string `json:"source"`
-	Description string `json:"description"`
+	Command     string   `json:"command"`
+	Source      string   `json:"source"`
+	Description string   `json:"description"`
+	Access      string   `json:"access,omitempty"`
+	Usage       string   `json:"usage,omitempty"`
+	InstallHint string   `json:"install_hint,omitempty"`
+	Examples    []string `json:"examples,omitempty"`
+}
+
+type commandManual struct {
+	Command     string   `json:"command"`
+	Source      string   `json:"source"`
+	Access      string   `json:"access"`
+	Usage       string   `json:"usage"`
+	Description string   `json:"description"`
+	Examples    []string `json:"examples,omitempty"`
+	InstallHint string   `json:"install_hint,omitempty"`
+	Related     []string `json:"related,omitempty"`
+}
+
+func commandHelp(args []string) int {
+	fs := flag.NewFlagSet("help", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	jsonOut := fs.Bool("json", false, "json output")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "Usage: vigil help [--json] <command>")
+		return 2
+	}
+	manual, ok := manualForCommand(fs.Arg(0))
+	if !ok {
+		fmt.Fprintf(os.Stderr, "unknown command: %s\n", fs.Arg(0))
+		return 1
+	}
+	if *jsonOut {
+		return printJSON(map[string]any{"status": "ok", "manual": manual})
+	}
+	fmt.Println(manual.Command)
+	fmt.Printf("  source: %s\n", manual.Source)
+	fmt.Printf("  access: %s\n", manual.Access)
+	fmt.Printf("  usage: %s\n", manual.Usage)
+	fmt.Printf("  about: %s\n", manual.Description)
+	if manual.InstallHint != "" {
+		fmt.Printf("  install: %s\n", manual.InstallHint)
+	}
+	for _, example := range manual.Examples {
+		fmt.Printf("  example: %s\n", example)
+	}
+	return 0
+}
+
+func manualForCommand(name string) (commandManual, bool) {
+	for _, info := range activeCommands() {
+		if info.Command != name {
+			continue
+		}
+		usage := info.Usage
+		if usage == "" {
+			usage = "vigil " + info.Command + " [args]"
+		}
+		access := info.Access
+		if access == "" {
+			access = helpAccessMarker(info.Command)
+		}
+		return commandManual{Command: info.Command, Source: info.Source, Access: access, Usage: usage, Description: info.Description, Examples: info.Examples, InstallHint: info.InstallHint, Related: relatedCommands(info.Command)}, true
+	}
+	return commandManual{}, false
 }
 
 func listCommands(args []string) int {
@@ -276,6 +372,7 @@ func printConfigSchema(args []string) int {
 		"profiles":       []string{"generic", "go-tool", "static-site"},
 		"extension_manifest": map[string]any{
 			"required": []string{"schema_version", "id", "name", "kind", "status", "private", "public_core", "description", "source_root", "packages", "commands"},
+			"optional": []string{"command_contracts"},
 		},
 	}
 	if jsonOut {
@@ -425,6 +522,53 @@ func configTemplate(args []string) int {
 	return 0
 }
 
+func configMigrate(configPath string, args []string) int {
+	fs := flag.NewFlagSet("config:migrate", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	write := fs.Bool("write", false, "write migrated config")
+	jsonOut := fs.Bool("json", false, "json output")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	path := resolvedConfigPath(configPath)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	var cfg config
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		fmt.Fprintln(os.Stderr, "invalid JSON: "+err.Error())
+		return 1
+	}
+	before := cfg.SchemaVersion
+	cfg = applyConfigDefaults(cfg, cfg.Profile)
+	cfg.SchemaVersion = configSchemaVersion
+	next, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	next = append(next, '\n')
+	changed := string(next) != string(data)
+	if *write && changed {
+		if err := os.WriteFile(path, next, 0o644); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+	}
+	payload := map[string]any{"status": "ok", "path": path, "from_schema": before, "to_schema": configSchemaVersion, "changed": changed, "written": *write && changed}
+	if *jsonOut {
+		return printJSON(payload)
+	}
+	if changed && !*write {
+		fmt.Printf("%s config migration available; rerun with --write\n", statusLabel("warn"))
+		return 0
+	}
+	fmt.Printf("%s config schema=%s\n", statusLabel("ok"), configSchemaVersion)
+	return 0
+}
+
 func explain(args []string) int {
 	fs := flag.NewFlagSet("explain", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -437,22 +581,11 @@ func explain(args []string) int {
 		return 2
 	}
 	name := fs.Arg(0)
-	for _, command := range activeCommands() {
-		if command.Command != name {
-			continue
-		}
-		payload := map[string]any{
-			"status":      "ok",
-			"command":     command.Command,
-			"source":      command.Source,
-			"access":      helpAccessMarker(command.Command),
-			"description": command.Description,
-			"usage":       "vigil " + command.Command + " [args]",
-		}
+	if manual, ok := manualForCommand(name); ok {
 		if *jsonOut {
-			return printJSON(payload)
+			return printJSON(map[string]any{"status": "ok", "manual": manual})
 		}
-		fmt.Printf("%s\nsource=%s\naccess=%s\nusage=%s\n%s\n", command.Command, command.Source, helpAccessMarker(command.Command), payload["usage"], command.Description)
+		fmt.Printf("%s\nsource=%s\naccess=%s\nusage=%s\n%s\n", manual.Command, manual.Source, manual.Access, manual.Usage, manual.Description)
 		return 0
 	}
 	fmt.Fprintf(os.Stderr, "unknown command: %s\n", name)
@@ -678,6 +811,10 @@ func promptConfigRepair(cfg config, profile string) config {
 	if len(cfg.Extensions.AllowedKinds) == 0 {
 		cfg.Extensions.AllowedKinds = splitCSV(promptString("extensions.allowed_kinds", strings.Join(defaults.Extensions.AllowedKinds, ",")))
 	}
+	if len(cfg.Extensions.EnabledIDs) > 0 && len(cfg.Extensions.DisabledIDs) > 0 {
+		cfg.Extensions.EnabledIDs = splitCSV(promptString("extensions.enabled_ids", strings.Join(cfg.Extensions.EnabledIDs, ",")))
+		cfg.Extensions.DisabledIDs = splitCSV(promptString("extensions.disabled_ids", strings.Join(cfg.Extensions.DisabledIDs, ",")))
+	}
 	cfg.PublicAssumptionPatterns = repairPatternPrompts(cfg.PublicAssumptionPatterns)
 	return cfg
 }
@@ -713,6 +850,16 @@ func applyConfigDefaults(cfg config, profile string) config {
 	if len(cfg.Extensions.AllowedKinds) == 0 {
 		cfg.Extensions.AllowedKinds = defaults.Extensions.AllowedKinds
 	}
+	if len(cfg.Extensions.EnabledIDs) > 0 && len(cfg.Extensions.DisabledIDs) > 0 {
+		enabled := stringSet(cfg.Extensions.EnabledIDs)
+		var disabled []string
+		for _, id := range cfg.Extensions.DisabledIDs {
+			if !enabled[id] {
+				disabled = append(disabled, id)
+			}
+		}
+		cfg.Extensions.DisabledIDs = disabled
+	}
 	cfg.PublicAssumptionPatterns = validPatternsOnly(cfg.PublicAssumptionPatterns)
 	return cfg
 }
@@ -745,6 +892,7 @@ func activeCommands() []commandInfo {
 	commands := []commandInfo{
 		{Command: "checks:command-catalog", Source: "core", Description: "Audit the active command catalog for duplicate or malformed entries."},
 		{Command: "checks:public-assumptions", Source: "core", Description: "Scan public Vigil source for product-specific assumptions and reserved category leaks."},
+		{Command: "checks:public-parity", Source: "core", Description: "Check public source stays inside configured public boundaries."},
 		{Command: "checks:staged-sensitive", Source: "core", Description: "Scan staged files for common secret patterns before commit."},
 		{Command: "checks:tracked-assistant-artifacts", Source: "core", Description: "Detect tracked local AI/editor instruction artifacts."},
 		{Command: "checks:workspace-hygiene", Source: "core", Description: "Detect local OS, editor, backup, and temporary artifacts."},
@@ -752,6 +900,7 @@ func activeCommands() []commandInfo {
 		{Command: "config:init", Source: "core", Description: "Generate or write a starter JSON config."},
 		{Command: "config:validate", Source: "core", Description: "Validate the effective JSON config."},
 		{Command: "config:repair", Source: "core", Description: "Interactively repair missing or broken Vigil JSON config fields."},
+		{Command: "config:migrate", Source: "core", Description: "Migrate config files to the current schema."},
 		{Command: "config:report", Source: "core", Description: "Report effective redacted Vigil configuration and discovery details."},
 		{Command: "config:template", Source: "core", Description: "Print a versioned starter config for a selected profile."},
 		{Command: "completion", Source: "core", Description: "Generate shell completion for bash, zsh, or fish."},
@@ -764,6 +913,7 @@ func activeCommands() []commandInfo {
 		{Command: "hooks:install", Source: "core", Description: "Install Vigil git hook shims into the current repository."},
 		{Command: "hooks:pre-commit", Source: "core", Description: "Run pre-commit gates from Vigil config."},
 		{Command: "hooks:pre-push", Source: "core", Description: "Run pre-push gates from Vigil config."},
+		{Command: "init:ci", Source: "core", Description: "Generate CI workflow examples from loaded Vigil gates."},
 		{Command: "list", Source: "core", Description: "List core and loaded extension commands."},
 		{Command: "next", Source: "core", Description: "Prioritize next local setup and verification actions."},
 		{Command: "plan", Source: "core", Description: "Explain which configured gates Vigil would run."},
@@ -778,12 +928,38 @@ func activeCommands() []commandInfo {
 		{Command: "workflow:local", Source: "core", Description: "Run configured local CI/CD gates with optional dry-run."},
 	}
 	for _, ext := range loadExtensions(extensionRoot()).Extensions {
+		contracts := map[string]extensionCommandContract{}
+		for _, contract := range ext.CommandContracts {
+			contracts[contract.Command] = contract
+		}
 		for _, command := range ext.Commands {
-			commands = append(commands, commandInfo{Command: command, Source: "extension:" + ext.ID, Description: extensionCommandDescription(command, ext.Description)})
+			contract := contracts[command]
+			description := extensionCommandDescription(command, ext.Description)
+			if strings.TrimSpace(contract.Description) != "" {
+				description = contract.Description
+			}
+			commands = append(commands, commandInfo{Command: command, Source: "extension:" + ext.ID, Description: description, Access: contract.Access, Usage: contract.Usage, InstallHint: contract.InstallHint, Examples: contract.Examples})
 		}
 	}
 	sort.Slice(commands, func(i, j int) bool { return commands[i].Command < commands[j].Command })
 	return commands
+}
+
+func relatedCommands(command string) []string {
+	switch {
+	case strings.HasPrefix(command, "config:"):
+		return []string{"config:validate", "config:report", "config:repair"}
+	case strings.HasPrefix(command, "extensions:"):
+		return []string{"extensions:list", "extensions:doctor"}
+	case strings.HasPrefix(command, "readme:"):
+		return []string{"readme:generate", "readme:check"}
+	case strings.HasPrefix(command, "a11y:"):
+		return []string{"a11y:inventory", "a11y:smoke"}
+	case strings.HasPrefix(command, "checks:"):
+		return []string{"verify", "guards:summary"}
+	default:
+		return []string{"list", "explain"}
+	}
 }
 
 func extensionCommandDescription(command, fallback string) string {
@@ -799,6 +975,7 @@ func extensionCommandDescription(command, fallback string) string {
 		"composer:validate":          "Run Composer manifest validation.",
 		"deploy:verify":              "Verify a configured public endpoint.",
 		"deps:why":                   "Find package references in known manifests.",
+		"github:init-ci":             "Generate GitHub CI workflow from Vigil gates.",
 		"history:diagnose":           "Alias for repo:health.",
 		"javascript:quality":         "Run public JavaScript quality adapters.",
 		"npm:audit":                  "Run npm audit.",
@@ -1224,6 +1401,29 @@ func checkPublicAssumptions(configPath string, args []string) int {
 	return findingsOutput(jsonOut, "public_assumptions", findings)
 }
 
+func checkPublicParity(configPath string, args []string) int {
+	jsonOut, err := parseJSONOnly(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
+	var findings []string
+	if found, err := publicAssumptionFindings(configPath); err != nil {
+		findings = append(findings, err.Error())
+	} else {
+		findings = append(findings, found...)
+	}
+	for _, ext := range loadExtensions(extensionRoot()).Extensions {
+		if ext.Private {
+			findings = append(findings, ext.Path+": public extension manifest cannot be private")
+		}
+		if !ext.PublicCore {
+			findings = append(findings, ext.Path+": public extension manifest must set public_core=true")
+		}
+	}
+	return findingsOutput(jsonOut, "public_parity", findings)
+}
+
 func publicAssumptionFindings(configPath string) ([]string, error) {
 	cfg, cfgPath, err := loadConfig(configPath)
 	if err != nil {
@@ -1272,6 +1472,68 @@ func publicAssumptionFindings(configPath string) ([]string, error) {
 	})
 	sort.Strings(findings)
 	return findings, nil
+}
+
+func initCI(configPath string, args []string) int {
+	fs := flag.NewFlagSet("init:ci", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	provider := fs.String("provider", "github", "ci provider")
+	write := fs.Bool("write", false, "write workflow file")
+	jsonOut := fs.Bool("json", false, "json output")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *provider != "github" {
+		fmt.Fprintln(os.Stderr, "only --provider=github is supported")
+		return 2
+	}
+	cfg, _, err := loadConfig(configPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	content := githubWorkflow(cfg)
+	path := filepath.Join(".github", "workflows", "vigil.yml")
+	if *write {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+	}
+	if *jsonOut {
+		return printJSON(map[string]any{"status": "ok", "provider": *provider, "path": path, "written": *write, "content": content})
+	}
+	if *write {
+		fmt.Printf("%s wrote %s\n", statusLabel("ok"), path)
+		return 0
+	}
+	fmt.Print(content)
+	return 0
+}
+
+func githubWorkflow(cfg config) string {
+	var b strings.Builder
+	b.WriteString("name: Vigil\n\n")
+	b.WriteString("on:\n  pull_request:\n  push:\n    branches: [main]\n\n")
+	b.WriteString("jobs:\n  vigil:\n    runs-on: ubuntu-latest\n    steps:\n")
+	b.WriteString("      - uses: actions/checkout@v4\n")
+	b.WriteString("      - uses: actions/setup-go@v5\n        with:\n          go-version: 'stable'\n")
+	b.WriteString("      - name: Install Vigil\n        run: go install github.com/PayCal-Technologies/vigil-core/cmd/vigil@latest\n")
+	b.WriteString("      - name: Verify Vigil\n        run: vigil verify --json\n")
+	for _, gate := range cfg.Gates {
+		b.WriteString("      - name: " + yamlScalar(gate.Name) + "\n")
+		b.WriteString("        run: " + yamlScalar(gate.Command) + "\n")
+	}
+	return b.String()
+}
+
+func yamlScalar(value string) string {
+	value = strings.ReplaceAll(value, "'", "''")
+	return "'" + value + "'"
 }
 
 func depsInventory(args []string) int {
@@ -2016,6 +2278,12 @@ func matchFileGlob(pattern, rel string) (bool, error) {
 
 func loadExtensions(root string) extensionReport {
 	report := extensionReport{SchemaVersion: configSchemaVersion, Status: "ok", Root: root}
+	settings := extensionSettings()
+	if !settings.Enabled {
+		return report
+	}
+	enabledIDs := stringSet(settings.EnabledIDs)
+	disabledIDs := stringSet(settings.DisabledIDs)
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -2041,6 +2309,12 @@ func loadExtensions(root string) extensionReport {
 			continue
 		}
 		ext.Path = path
+		if len(enabledIDs) > 0 && !enabledIDs[ext.ID] {
+			continue
+		}
+		if disabledIDs[ext.ID] {
+			continue
+		}
 		report.Issues = append(report.Issues, validateExtension(ext)...)
 		report.Extensions = append(report.Extensions, ext)
 	}
@@ -2052,7 +2326,45 @@ func loadExtensions(root string) extensionReport {
 	return report
 }
 
+func extensionSettings() extensionsConfig {
+	settings := extensionsConfig{Enabled: true}
+	path := resolvedConfigPath("")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return settings
+	}
+	var raw struct {
+		Extensions extensionsConfig `json:"extensions"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return settings
+	}
+	settings = raw.Extensions
+	if strings.TrimSpace(settings.ManifestRoot) == "" {
+		settings.ManifestRoot = "extensions"
+	}
+	return settings
+}
+
+func stringSet(values []string) map[string]bool {
+	out := map[string]bool{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			out[value] = true
+		}
+	}
+	return out
+}
+
 func extensionRoot() string {
+	settings := extensionSettings()
+	if strings.TrimSpace(settings.ManifestRoot) != "" {
+		if root := findUpward(mustGetwd(), settings.ManifestRoot); root != "" {
+			return root
+		}
+		return settings.ManifestRoot
+	}
 	if root := findUpward(mustGetwd(), "extensions"); root != "" {
 		return root
 	}
@@ -2112,6 +2424,19 @@ func validateExtension(ext extensionManifest) []string {
 	}
 	if ext.ID != "" && !regexp.MustCompile(`^[a-z][a-z0-9-]*$`).MatchString(ext.ID) {
 		issues = append(issues, ext.Path+": id must be lowercase kebab-case")
+	}
+	commands := stringSet(ext.Commands)
+	for i, contract := range ext.CommandContracts {
+		if strings.TrimSpace(contract.Command) == "" {
+			issues = append(issues, fmt.Sprintf("%s: command_contracts[%d] missing command", ext.Path, i))
+			continue
+		}
+		if !commands[contract.Command] {
+			issues = append(issues, fmt.Sprintf("%s: command_contracts[%d] command is not listed in commands", ext.Path, i))
+		}
+		if contract.Access != "" && contract.Access != "r" && contract.Access != "r/w" && contract.Access != "w" {
+			issues = append(issues, fmt.Sprintf("%s: command_contracts[%d] unsupported access", ext.Path, i))
+		}
 	}
 	return issues
 }
@@ -2184,6 +2509,12 @@ func validateConfigIssues(cfg config) []configIssue {
 	}
 	if cfg.Extensions.Enabled && strings.TrimSpace(cfg.Extensions.ManifestRoot) == "" {
 		add("extensions.manifest_root", "extensions.manifest_root.required", "extensions.manifest_root is required when extensions are enabled")
+	}
+	enabled := stringSet(cfg.Extensions.EnabledIDs)
+	for _, id := range cfg.Extensions.DisabledIDs {
+		if enabled[id] {
+			add("extensions.disabled_ids", "extensions.selection.conflict", "extension cannot be both enabled and disabled: "+id)
+		}
 	}
 	for i, pattern := range cfg.PublicAssumptionPatterns {
 		if _, err := regexp.Compile(pattern); err != nil {
@@ -2448,6 +2779,9 @@ func parseJSONOnly(args []string) (bool, error) {
 func resolvedConfigPath(path string) string {
 	if strings.TrimSpace(path) != "" {
 		return path
+	}
+	if envPath := strings.TrimSpace(os.Getenv("VIGIL_CONFIG")); envPath != "" {
+		return envPath
 	}
 	if found := findFileUpward(mustGetwd(), defaultConfigName); found != "" {
 		return found

@@ -16,5 +16,35 @@
     "a11y:pa11y",
     "a11y:lighthouse",
     "a11y:playwright"
+  ],
+  "command_contracts": [
+    {
+      "command": "a11y:inventory",
+      "access": "r",
+      "usage": "vigil a11y:inventory [--json]",
+      "description": "List locally available accessibility tools.",
+      "install_hint": "npm install -D pa11y lighthouse @playwright/test"
+    },
+    {
+      "command": "a11y:pa11y",
+      "access": "r",
+      "usage": "vigil a11y:pa11y [url]",
+      "description": "Run Pa11y against a route.",
+      "install_hint": "npm install -D pa11y"
+    },
+    {
+      "command": "a11y:lighthouse",
+      "access": "r",
+      "usage": "vigil a11y:lighthouse [url]",
+      "description": "Run Lighthouse accessibility checks.",
+      "install_hint": "npm install -D lighthouse"
+    },
+    {
+      "command": "a11y:playwright",
+      "access": "r",
+      "usage": "vigil a11y:playwright [args]",
+      "description": "Run Playwright accessibility tests.",
+      "install_hint": "npm install -D @playwright/test"
+    }
   ]
 }

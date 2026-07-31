@@ -12,5 +12,23 @@
   "commands": [
     "readme:generate",
     "readme:check"
+  ],
+  "command_contracts": [
+    {
+      "command": "readme:generate",
+      "access": "r/w",
+      "usage": "vigil readme:generate [--dry-run] [--path README.md]",
+      "description": "Generate Scribe managed README block.",
+      "examples": [
+        "vigil readme:generate --dry-run",
+        "vigil readme:generate"
+      ]
+    },
+    {
+      "command": "readme:check",
+      "access": "r",
+      "usage": "vigil readme:check [--json]",
+      "description": "Check Scribe managed README block freshness."
+    }
   ]
 }
