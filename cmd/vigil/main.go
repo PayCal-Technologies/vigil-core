@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"runtime/debug"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -105,6 +106,17 @@ type extensionReport struct {
 	Count         int                 `json:"count"`
 	Extensions    []extensionManifest `json:"extensions"`
 	Issues        []string            `json:"issues,omitempty"`
+}
+
+type configDocument struct {
+	Config          config
+	Raw             map[string]json.RawMessage
+	LegacyAuthority *legacyAuthorityConfig
+	SchemaVersion   string
+}
+
+type atomicWriteResult struct {
+	BackupPath string `json:"backup_path,omitempty"`
 }
 
 func main() {
@@ -214,6 +226,8 @@ func run(args []string) int {
 		return configReport(*configPath, commandArgs)
 	case "config:template":
 		return configTemplate(commandArgs)
+	case "setup", "setup:wizard":
+		return setupWizard(*configPath, commandArgs)
 	case "guards:summary":
 		return guardsSummary(commandArgs)
 	case "self-heal:plan":
@@ -357,6 +371,8 @@ func requiresMutationConfirmation(command string, args []string) bool {
 		return hasFlag(args, "write") || hasFlag(args, "force")
 	case "config:migrate":
 		return hasFlag(args, "write")
+	case "setup", "setup:wizard":
+		return hasFlag(args, "write")
 	case "config:repair", "hooks:install":
 		return true
 	case "init:ci", "github:init-ci":
@@ -411,7 +427,7 @@ func extensionCommandContractFor(command string) (extensionCommandContract, bool
 
 func mutationRequirementsSatisfied(configPath string, command string, confirmation confirmationArgs) bool {
 	switch command {
-	case "config:init", "config:repair", "config:migrate":
+	case "config:init", "config:repair", "config:migrate", "setup", "setup:wizard":
 		return true
 	}
 	cfg, path, err := loadConfig(configPath)
@@ -558,7 +574,7 @@ func printConfigSchema(args []string) int {
 		return printJSON(schema)
 	}
 	fmt.Println("Vigil config format: JSON")
-	fmt.Println("Schema version: 1")
+	fmt.Println("Schema version: " + configSchemaVersion)
 	fmt.Println("Required: schema_version, profile, project, coordination, gates, extensions")
 	return 0
 }
@@ -590,7 +606,7 @@ func initConfig(configPath string, args []string) int {
 			fmt.Fprintf(os.Stderr, "config already exists: %s\n", path)
 			return 1
 		}
-		if err := os.WriteFile(path, data, 0o644); err != nil {
+		if _, err := atomicWriteFile(path, data, false); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}
@@ -701,6 +717,365 @@ func configTemplate(args []string) int {
 	return 0
 }
 
+func setupWizard(configPath string, args []string) int {
+	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	profile := fs.String("profile", "auto", "profile or auto")
+	write := fs.Bool("write", false, "write or repair config")
+	force := fs.Bool("force", false, "overwrite existing config when writing")
+	jsonOut := fs.Bool("json", false, "json output")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	plan := buildSetupPlan(configPath, *profile)
+	if *write {
+		if plan["overall"] == "blocked" {
+			message := "setup write blocked by current repository state"
+			if *jsonOut {
+				return printStatusJSON(withSetupError(plan, message), 1)
+			}
+			fmt.Fprintln(os.Stderr, message)
+			return 1
+		}
+		if plan["config_state"] == "valid-v2" && !*force {
+			plan["written"] = false
+			plan["changed"] = false
+			delete(plan, "proposed_config")
+			delete(plan, "raw_document")
+			if *jsonOut {
+				return printStatusJSON(plan, boolExit(plan["overall"] == "blocked"))
+			}
+			renderSetupPlan(plan)
+			return boolExit(plan["overall"] == "blocked")
+		}
+		cfg := plan["proposed_config"].(config)
+		rawDoc, _ := plan["raw_document"].(map[string]json.RawMessage)
+		data, err := marshalConfigDocument(rawDoc, cfg)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		path := plan["config_path"].(string)
+		writeResult, err := atomicWriteFile(path, data, fileExists(path))
+		if err != nil {
+			if *jsonOut {
+				return printStatusJSON(withSetupError(plan, err.Error()), 1)
+			}
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		if _, _, err := loadConfig(path); err != nil {
+			if *jsonOut {
+				return printStatusJSON(withSetupError(plan, "post-write validation failed: "+err.Error()), 1)
+			}
+			fmt.Fprintln(os.Stderr, "post-write validation failed: "+err.Error())
+			return 1
+		}
+		plan = buildSetupPlan(configPath, *profile)
+		plan["written"] = true
+		plan["backup_path"] = writeResult.BackupPath
+	} else {
+		plan["written"] = false
+	}
+	delete(plan, "proposed_config")
+	delete(plan, "raw_document")
+	if *jsonOut {
+		return printStatusJSON(plan, boolExit(plan["overall"] == "blocked"))
+	}
+	renderSetupPlan(plan)
+	return boolExit(plan["overall"] == "blocked")
+}
+
+func buildSetupPlan(configPath string, requestedProfile string) map[string]any {
+	path := resolvedConfigPath(configPath)
+	detected := detectSetupProfile()
+	selectedProfile := strings.TrimSpace(requestedProfile)
+	if selectedProfile == "" || selectedProfile == "auto" {
+		selectedProfile = detected["primary"].(string)
+	}
+	if selectedProfile == "" {
+		selectedProfile = "generic"
+	}
+	proposed := templateConfig(selectedProfile)
+	rawDoc := map[string]json.RawMessage{}
+	state := "missing"
+	issues := []configIssue{}
+	warnings := []string{}
+	blockers := []string{}
+	var policyDiff map[string]any
+	if data, err := os.ReadFile(path); err != nil {
+		if !os.IsNotExist(err) {
+			state = "unreadable"
+			blockers = append(blockers, err.Error())
+		}
+	} else {
+		doc, err := parseConfigDocument(data)
+		if err != nil {
+			state = "malformed"
+			warnings = append(warnings, "config is malformed JSON; setup --write will replace it after creating a backup")
+		} else {
+			rawDoc = doc.Raw
+			proposed = applyConfigDocumentDefaults(doc, firstNonEmpty(doc.Config.Profile, selectedProfile))
+			proposed.SchemaVersion = configSchemaVersion
+			issues = validateConfigIssues(doc.Config)
+			switch {
+			case doc.SchemaVersion != "unknown" && compareSchemaVersion(doc.SchemaVersion, configSchemaVersion) > 0:
+				state = "unsupported-newer-schema"
+				blockers = append(blockers, "config schema "+doc.SchemaVersion+" is newer than supported schema "+configSchemaVersion)
+			case doc.LegacyAuthority != nil || doc.SchemaVersion == "1":
+				state = "legacy-v1"
+				policyDiff = map[string]any{
+					"legacy_mutation_requires":   doc.LegacyAuthority,
+					"proposed_mutation_requires": proposed.Coordination.MutationRequires,
+					"policy_removed":             false,
+				}
+			case len(issues) > 0:
+				state = "partial-v2"
+			default:
+				state = "valid-v2"
+			}
+		}
+	}
+	if gitRoot() == "" {
+		warnings = append(warnings, "not inside a Git checkout; Git hooks and GitHub handoff are optional/skipped")
+	}
+	validationAfter := validateConfigIssues(proposed)
+	dimensions := map[string]string{
+		"core_config":              readinessStatus(len(validationAfter) == 0, state),
+		"policy_preservation":      policyPreservationStatus(state, policyDiff),
+		"public_core_verification": "not_run",
+		"project_preflight":        "not_run",
+		"github_actions":           existingPathStatus(filepath.Join(".github", "workflows")),
+		"git_hooks":                existingPathStatus(filepath.Join(".git", "hooks")),
+	}
+	overall := "ready_with_recommendations"
+	if len(blockers) > 0 {
+		overall = "blocked"
+	} else if state == "missing" || state == "legacy-v1" || state == "partial-v2" || state == "malformed" || len(validationAfter) > 0 {
+		overall = "changes_required"
+	} else if dimensions["github_actions"] == "present" && dimensions["git_hooks"] == "present" {
+		overall = "ready"
+	}
+	proposedMutations := []map[string]any{}
+	if len(blockers) == 0 {
+		proposedMutations = append(proposedMutations, map[string]any{"id": "write-config", "mutates": true, "requires_confirmation": true, "path": path})
+	}
+	return map[string]any{
+		"output_contract_version": "1",
+		"status":                  okFail(len(blockers)),
+		"overall":                 overall,
+		"mode":                    "preview",
+		"config_path":             path,
+		"config_state":            state,
+		"profile": map[string]any{
+			"selected":     selectedProfile,
+			"requested":    requestedProfile,
+			"detected":     detected["primary"],
+			"confidence":   detected["confidence"],
+			"evidence":     detected["evidence"],
+			"capabilities": detected["capabilities"],
+			"ambiguities":  detected["ambiguities"],
+		},
+		"readiness":          dimensions,
+		"blockers":           blockers,
+		"warnings":           warnings,
+		"validation":         map[string]any{"current_issues": issues, "proposed_issues": validationAfter},
+		"policy_diff":        policyDiff,
+		"proposed_mutations": proposedMutations,
+		"recommended_actions": []map[string]any{
+			{"id": "validate", "command": "vigil config:validate --json", "mutates": false, "requires_confirmation": false},
+			{"id": "plan", "command": "vigil plan --json", "mutates": false, "requires_confirmation": false},
+			{"id": "verify", "command": "vigil verify --json", "mutates": false, "requires_confirmation": false},
+			{"id": "github-actions-helper", "command": "vigil github:init-ci", "mutates": false, "requires_confirmation": false},
+			{"id": "git-hooks", "command": "vigil --allow-mutation hooks:install", "mutates": true, "requires_confirmation": true},
+		},
+		"proposed_config": proposed,
+		"raw_document":    rawDoc,
+	}
+}
+
+func withSetupError(plan map[string]any, message string) map[string]any {
+	next := map[string]any{}
+	for key, value := range plan {
+		next[key] = value
+	}
+	next["status"] = "fail"
+	next["overall"] = "blocked"
+	next["blockers"] = append(stringSliceFromAny(next["blockers"]), message)
+	delete(next, "proposed_config")
+	delete(next, "raw_document")
+	return next
+}
+
+func renderSetupPlan(plan map[string]any) {
+	fmt.Printf("%s setup overall=%s config=%s\n", statusLabel(plan["status"].(string)), plan["overall"], plan["config_state"])
+	if profile, ok := plan["profile"].(map[string]any); ok {
+		fmt.Printf("profile=%v confidence=%v evidence=%v\n", profile["selected"], profile["confidence"], profile["evidence"])
+	}
+	for _, warning := range stringSliceFromAny(plan["warnings"]) {
+		fmt.Printf("%s %s\n", statusLabel("warn"), warning)
+	}
+	for _, blocker := range stringSliceFromAny(plan["blockers"]) {
+		fmt.Printf("%s %s\n", statusLabel("fail"), blocker)
+	}
+}
+
+func detectSetupProfile() map[string]any {
+	evidence := []string{}
+	capabilities := []string{}
+	ambiguities := []string{}
+	hasGo := fileExists("go.mod")
+	hasComposer := fileExists("composer.json")
+	hasPackage := fileExists("package.json")
+	hasNative := fileExists("CMakeLists.txt") || fileExists("Package.swift") || fileExists("Makefile") || hasFileWithExtension([]string{".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".m", ".mm", ".swift", ".qml", ".xaml", ".ps1"})
+	hasStatic := hasFileWithExtension([]string{".html", ".css"})
+	if hasGo {
+		evidence = append(evidence, "go.mod")
+		capabilities = append(capabilities, "go")
+	}
+	if hasComposer {
+		evidence = append(evidence, "composer.json")
+		capabilities = append(capabilities, "php")
+	}
+	if hasPackage {
+		evidence = append(evidence, "package.json")
+		capabilities = append(capabilities, "javascript-assets")
+	}
+	if hasNative {
+		evidence = append(evidence, "native build/source files")
+		capabilities = append(capabilities, "native")
+	}
+	if hasStatic {
+		evidence = append(evidence, "html/css files")
+		capabilities = append(capabilities, "static-assets")
+	}
+	primary := "generic"
+	confidence := "medium"
+	switch {
+	case hasComposer:
+		primary = "php-app"
+		confidence = "high"
+		if hasPackage {
+			ambiguities = append(ambiguities, "package.json treated as supporting assets for php-app")
+		}
+	case hasGo:
+		primary = "go-tool"
+		confidence = "high"
+	case hasPackage:
+		primary = "js-app"
+		confidence = "high"
+	case hasNative:
+		primary = "native-app"
+		confidence = "medium"
+	case hasStatic:
+		primary = "static-site"
+		confidence = "medium"
+	default:
+		confidence = "low"
+	}
+	if len(evidence) == 0 {
+		evidence = append(evidence, "no known profile files detected")
+	}
+	return map[string]any{"primary": primary, "confidence": confidence, "evidence": evidence, "capabilities": uniqueStrings(capabilities), "ambiguities": ambiguities}
+}
+
+func hasFileWithExtension(extensions []string) bool {
+	seen := stringSet(extensions)
+	found := false
+	_ = filepath.WalkDir(".", func(path string, entry os.DirEntry, err error) error {
+		if err != nil || found {
+			return nil
+		}
+		if entry.IsDir() {
+			if path != "." {
+				switch entry.Name() {
+				case ".git", "node_modules", "vendor", "bin", "tmp":
+					return filepath.SkipDir
+				}
+			}
+			return nil
+		}
+		if seen[strings.ToLower(filepath.Ext(path))] {
+			found = true
+		}
+		return nil
+	})
+	return found
+}
+
+func compareSchemaVersion(a string, b string) int {
+	if a == b {
+		return 0
+	}
+	aInt, aErr := strconv.Atoi(strings.TrimSpace(a))
+	bInt, bErr := strconv.Atoi(strings.TrimSpace(b))
+	if aErr == nil && bErr == nil {
+		switch {
+		case aInt > bInt:
+			return 1
+		case aInt < bInt:
+			return -1
+		default:
+			return 0
+		}
+	}
+	if a > b {
+		return 1
+	}
+	return -1
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func readinessStatus(ok bool, state string) string {
+	if ok && state == "valid-v2" {
+		return "ready"
+	}
+	if ok {
+		return "repair_available"
+	}
+	return "changes_required"
+}
+
+func policyPreservationStatus(state string, diff map[string]any) string {
+	if state == "legacy-v1" && diff != nil {
+		return "verified"
+	}
+	if state == "valid-v2" {
+		return "not_applicable"
+	}
+	return "pending"
+}
+
+func existingPathStatus(path string) string {
+	if fileExists(path) {
+		return "present"
+	}
+	return "not_configured"
+}
+
+func stringSliceFromAny(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return append([]string{}, typed...)
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			out = append(out, fmt.Sprint(item))
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
 func configMigrate(configPath string, args []string) int {
 	fs := flag.NewFlagSet("config:migrate", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -715,27 +1090,34 @@ func configMigrate(configPath string, args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	cfg, before, err := migrateConfigData(data)
+	doc, err := parseConfigDocument(data)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "invalid JSON: "+err.Error())
 		return 1
 	}
-	cfg = applyConfigDefaults(cfg, cfg.Profile)
+	before := doc.SchemaVersion
+	if before != "unknown" && compareSchemaVersion(before, configSchemaVersion) > 0 {
+		fmt.Fprintf(os.Stderr, "config schema %s is newer than supported schema %s; refusing to downgrade\n", before, configSchemaVersion)
+		return 1
+	}
+	cfg := applyConfigDocumentDefaults(doc, doc.Config.Profile)
 	cfg.SchemaVersion = configSchemaVersion
-	next, err := json.MarshalIndent(cfg, "", "  ")
+	next, err := marshalConfigDocument(doc.Raw, cfg)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	next = append(next, '\n')
 	changed := string(next) != string(data)
+	writeResult := atomicWriteResult{}
 	if *write && changed {
-		if err := os.WriteFile(path, next, 0o644); err != nil {
+		result, err := atomicWriteFile(path, next, true)
+		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}
+		writeResult = result
 	}
-	payload := map[string]any{"status": "ok", "path": path, "from_schema": before, "to_schema": configSchemaVersion, "changed": changed, "written": *write && changed}
+	payload := map[string]any{"status": "ok", "path": path, "from_schema": before, "to_schema": configSchemaVersion, "changed": changed, "written": *write && changed, "backup_path": writeResult.BackupPath}
 	if *jsonOut {
 		return printJSON(payload)
 	}
@@ -748,29 +1130,162 @@ func configMigrate(configPath string, args []string) int {
 }
 
 func migrateConfigData(data []byte) (config, string, error) {
-	var raw struct {
-		config
-		LegacyAuthority *legacyAuthorityConfig `json:"authority,omitempty"`
-	}
-	if err := json.Unmarshal(data, &raw); err != nil {
+	doc, err := parseConfigDocument(data)
+	if err != nil {
 		return config{}, "", err
 	}
-	cfg := raw.config
-	before := strings.TrimSpace(cfg.SchemaVersion)
-	if before == "" {
-		before = "unknown"
+	return doc.Config, doc.SchemaVersion, nil
+}
+
+func parseConfigDocument(data []byte) (configDocument, error) {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return configDocument{}, err
 	}
-	if raw.LegacyAuthority != nil && len(cfg.Coordination.MutationRequires) == 0 {
-		cfg.Coordination.MutationRequires = append([]string{}, raw.LegacyAuthority.MutationRequires...)
+	var cfg config
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return configDocument{}, err
 	}
-	if raw.LegacyAuthority != nil && strings.TrimSpace(cfg.Coordination.Mode) == "" {
-		if raw.LegacyAuthority.LocalFirst {
+	var legacy *legacyAuthorityConfig
+	if authorityRaw, ok := raw["authority"]; ok {
+		var parsed legacyAuthorityConfig
+		if err := json.Unmarshal(authorityRaw, &parsed); err == nil {
+			legacy = &parsed
+		}
+	}
+	if legacy != nil && len(cfg.Coordination.MutationRequires) == 0 {
+		cfg.Coordination.MutationRequires = append([]string{}, legacy.MutationRequires...)
+	}
+	if legacy != nil && strings.TrimSpace(cfg.Coordination.Mode) == "" {
+		if legacy.LocalFirst {
 			cfg.Coordination.Mode = "github-adjacent-helper"
 		} else {
 			cfg.Coordination.Mode = "custom"
 		}
 	}
-	return cfg, before, nil
+	before := strings.TrimSpace(cfg.SchemaVersion)
+	if before == "" {
+		before = "unknown"
+	}
+	return configDocument{Config: cfg, Raw: raw, LegacyAuthority: legacy, SchemaVersion: before}, nil
+}
+
+func marshalConfigDocument(raw map[string]json.RawMessage, cfg config) ([]byte, error) {
+	doc := map[string]json.RawMessage{}
+	for key, value := range raw {
+		doc[key] = value
+	}
+	setRaw := func(key string, value any) error {
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return err
+		}
+		doc[key] = encoded
+		return nil
+	}
+	if err := setRaw("schema_version", cfg.SchemaVersion); err != nil {
+		return nil, err
+	}
+	if err := setRaw("profile", cfg.Profile); err != nil {
+		return nil, err
+	}
+	if err := setRaw("project", cfg.Project); err != nil {
+		return nil, err
+	}
+	if err := setRaw("coordination", mergeObjectRaw(raw["coordination"], map[string]any{
+		"mode":                   cfg.Coordination.Mode,
+		"authoritative_surfaces": cfg.Coordination.AuthoritativeSurfaces,
+		"mutation_requires":      cfg.Coordination.MutationRequires,
+	})); err != nil {
+		return nil, err
+	}
+	if err := setRaw("gates", cfg.Gates); err != nil {
+		return nil, err
+	}
+	if err := setRaw("extensions", mergeObjectRaw(raw["extensions"], map[string]any{
+		"enabled":         cfg.Extensions.Enabled,
+		"manifest_root":   cfg.Extensions.ManifestRoot,
+		"allowed_kinds":   cfg.Extensions.AllowedKinds,
+		"enabled_ids":     cfg.Extensions.EnabledIDs,
+		"disabled_ids":    cfg.Extensions.DisabledIDs,
+		"require_private": cfg.Extensions.RequirePrivate,
+	})); err != nil {
+		return nil, err
+	}
+	if len(cfg.PublicAssumptionPatterns) > 0 {
+		if err := setRaw("public_assumption_patterns", cfg.PublicAssumptionPatterns); err != nil {
+			return nil, err
+		}
+	}
+	if len(cfg.Metadata) > 0 {
+		if err := setRaw("metadata", cfg.Metadata); err != nil {
+			return nil, err
+		}
+	}
+	delete(doc, "authority")
+	encoded, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return append(encoded, '\n'), nil
+}
+
+func mergeObjectRaw(original json.RawMessage, updates map[string]any) map[string]any {
+	merged := map[string]any{}
+	if len(original) > 0 {
+		_ = json.Unmarshal(original, &merged)
+	}
+	for key, value := range updates {
+		merged[key] = value
+	}
+	return merged
+}
+
+func atomicWriteFile(path string, data []byte, backup bool) (atomicWriteResult, error) {
+	result := atomicWriteResult{}
+	dir := filepath.Dir(path)
+	info, statErr := os.Stat(path)
+	mode := os.FileMode(0o644)
+	if statErr == nil {
+		mode = info.Mode().Perm()
+	}
+	if backup && statErr == nil {
+		backupPath := fmt.Sprintf("%s.bak-%s", path, time.Now().UTC().Format("20060102T150405.000000000Z"))
+		if existing, err := os.ReadFile(path); err != nil {
+			return result, err
+		} else if err := os.WriteFile(backupPath, existing, mode); err != nil {
+			return result, err
+		}
+		result.BackupPath = backupPath
+	}
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return result, err
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return result, err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return result, err
+	}
+	if err := tmp.Close(); err != nil {
+		return result, err
+	}
+	if err := os.Chmod(tmpPath, mode); err != nil {
+		return result, err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return result, err
+	}
+	if dirFile, err := os.Open(dir); err == nil {
+		_ = dirFile.Sync()
+		_ = dirFile.Close()
+	}
+	return result, nil
 }
 
 func explain(args []string) int {
@@ -916,7 +1431,8 @@ func repairConfig(configPath string, args []string) int {
 		return 2
 	}
 	path := resolvedConfigPath(configPath)
-	cfg := templateConfig(*profile)
+	cfg := config{}
+	rawDoc := map[string]json.RawMessage{}
 	existed := fileExists(path)
 	replacedMalformed := false
 	if existed {
@@ -926,15 +1442,29 @@ func repairConfig(configPath string, args []string) int {
 			return 1
 		}
 		if strings.TrimSpace(string(data)) != "" {
-			if err := json.Unmarshal(data, &cfg); err != nil {
+			doc, err := parseConfigDocument(data)
+			if err != nil {
 				if !*yes && !promptBool("Config is not valid JSON. Replace it with a valid template?", false) {
 					fmt.Fprintln(os.Stderr, "config repair cancelled")
 					return 1
 				}
 				cfg = templateConfig(*profile)
 				replacedMalformed = true
+			} else {
+				if doc.SchemaVersion != "unknown" && compareSchemaVersion(doc.SchemaVersion, configSchemaVersion) > 0 {
+					message := "config schema " + doc.SchemaVersion + " is newer than supported schema " + configSchemaVersion + "; refusing to downgrade"
+					if *jsonOut {
+						return printStatusJSON(map[string]any{"status": "fail", "path": path, "issues": []string{message}}, 1)
+					}
+					fmt.Fprintln(os.Stderr, message)
+					return 1
+				}
+				cfg = doc.Config
+				rawDoc = doc.Raw
 			}
 		}
+	} else {
+		cfg = templateConfig(*profile)
 	}
 	before := validateConfigIssues(cfg)
 	if existed && len(before) == 0 && !replacedMalformed {
@@ -945,7 +1475,11 @@ func repairConfig(configPath string, args []string) int {
 		return 0
 	}
 	if *yes {
-		cfg = applyConfigDefaults(cfg, *profile)
+		if len(rawDoc) > 0 {
+			cfg = applyConfigDocumentDefaults(configDocument{Config: cfg, Raw: rawDoc}, *profile)
+		} else {
+			cfg = applyConfigDefaults(cfg, *profile)
+		}
 	} else {
 		cfg = promptConfigRepair(cfg, *profile)
 	}
@@ -964,18 +1498,22 @@ func repairConfig(configPath string, args []string) int {
 		fmt.Fprintln(os.Stderr, "config repair cancelled")
 		return 1
 	}
-	data, err := json.MarshalIndent(cfg, "", "  ")
+	data, err := marshalConfigDocument(rawDoc, cfg)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	data = append(data, '\n')
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	writeResult, err := atomicWriteFile(path, data, existed)
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	if _, _, err := loadConfig(path); err != nil {
+		fmt.Fprintln(os.Stderr, "post-write validation failed: "+err.Error())
+		return 1
+	}
 	if *jsonOut {
-		return printJSON(map[string]any{"status": "ok", "path": path, "changed": true, "replaced_malformed": replacedMalformed, "fixed_issues": before})
+		return printJSON(map[string]any{"status": "ok", "path": path, "changed": true, "replaced_malformed": replacedMalformed, "fixed_issues": before, "backup_path": writeResult.BackupPath})
 	}
 	fmt.Printf("%s repaired config: %s\n", statusLabel("ok"), path)
 	return 0
@@ -1077,6 +1615,30 @@ func applyConfigDefaults(cfg config, profile string) config {
 	return cfg
 }
 
+func applyConfigDocumentDefaults(doc configDocument, profile string) config {
+	cfg := applyConfigDefaults(doc.Config, profile)
+	defaults := templateConfig(firstNonEmpty(profile, cfg.Profile, "generic"))
+	if !rawObjectHasKey(doc.Raw["extensions"], "enabled") {
+		cfg.Extensions.Enabled = defaults.Extensions.Enabled
+		if cfg.Extensions.Enabled && strings.TrimSpace(cfg.Extensions.ManifestRoot) == "" {
+			cfg.Extensions.ManifestRoot = defaults.Extensions.ManifestRoot
+		}
+	}
+	return cfg
+}
+
+func rawObjectHasKey(raw json.RawMessage, key string) bool {
+	if len(raw) == 0 {
+		return false
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &object); err != nil {
+		return false
+	}
+	_, ok := object[key]
+	return ok
+}
+
 func extensionCommand(command string, args []string) int {
 	jsonOut, err := parseJSONOnly(args)
 	if err != nil {
@@ -1133,6 +1695,8 @@ func activeCommands() []commandInfo {
 		{Command: "resources:catalog", Source: "core", Description: "List public local diagnostic resources."},
 		{Command: "self-heal:plan", Source: "core", Description: "Suggest safe repairs for local configuration and setup."},
 		{Command: "settings:show", Source: "core", Description: "Alias for config:report."},
+		{Command: "setup", Source: "core", Description: "Plan or apply first-run Vigil configuration setup."},
+		{Command: "setup:wizard", Source: "core", Description: "Alias for setup."},
 		{Command: "status", Source: "core", Description: "Summarize config, extension, git, and command readiness."},
 		{Command: "support:bundle", Source: "core", Description: "Write or preview a redacted local diagnostic bundle."},
 		{Command: "tools:catalog", Source: "core", Description: "List public tools and command contracts."},
@@ -1224,7 +1788,7 @@ func commandAccess(command string) string {
 		return access
 	}
 	switch command {
-	case "config:init", "config:migrate", "config:repair", "github:init-ci", "hooks:install", "hooks:pre-commit", "hooks:pre-push", "init:ci", "readme:generate", "support:bundle", "workflow:local":
+	case "config:init", "config:migrate", "config:repair", "github:init-ci", "hooks:install", "hooks:pre-commit", "hooks:pre-push", "init:ci", "readme:generate", "setup", "setup:wizard", "support:bundle", "workflow:local":
 		return "conditional-write"
 	default:
 		return "read"
@@ -1236,7 +1800,7 @@ func commandWriteFlags(command string) []string {
 		return append([]string{}, contract.WriteFlags...)
 	}
 	switch command {
-	case "config:init":
+	case "config:init", "setup", "setup:wizard":
 		return []string{"--write", "--force"}
 	case "config:migrate", "github:init-ci", "init:ci":
 		return []string{"--write"}

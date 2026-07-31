@@ -36,6 +36,8 @@ func TestActiveCommandsIncludePublicCICD(t *testing.T) {
 		"config:report",
 		"config:migrate",
 		"config:template",
+		"setup",
+		"setup:wizard",
 		"explain",
 		"init:ci",
 		"github:init-ci",
@@ -639,7 +641,11 @@ func TestConfigMigratePreservesLegacyAuthorityMutationRequirements(t *testing.T)
     "enabled": true,
     "manifest_root": "extensions",
     "allowed_kinds": ["custom"],
-    "require_private": false
+    "require_private": false,
+    "x_extension": "keep"
+  },
+  "x_custom": {
+    "keep": true
   }
 }`
 	if err := os.WriteFile(defaultConfigName, []byte(legacy+"\n"), 0o644); err != nil {
@@ -672,6 +678,212 @@ func TestConfigMigratePreservesLegacyAuthorityMutationRequirements(t *testing.T)
 	if len(migrated.Coordination.AuthoritativeSurfaces) == 0 {
 		t.Fatal("coordination.authoritative_surfaces was not populated")
 	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := raw["x_custom"].(map[string]any); !ok {
+		t.Fatalf("custom top-level field not preserved:\n%s", data)
+	}
+	extensions, ok := raw["extensions"].(map[string]any)
+	if !ok || extensions["x_extension"] != "keep" {
+		t.Fatalf("custom extension field not preserved:\n%s", data)
+	}
+}
+
+func TestConfigRepairPartialConfigPreservesUnknownFieldsAndExplicitFalse(t *testing.T) {
+	temp := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+	if err := os.Chdir(temp); err != nil {
+		t.Fatal(err)
+	}
+	partial := `{
+  "schema_version": "2",
+  "coordination": {
+    "x_coordination": "keep"
+  },
+  "extensions": {
+    "enabled": false,
+    "x_extension": "keep"
+  },
+  "x_custom": {
+    "keep": true
+  }
+}`
+	if err := os.WriteFile(defaultConfigName, []byte(partial+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := repairConfig("", []string{"--yes", "--json"}); code != 0 {
+		t.Fatalf("repairConfig exit = %d", code)
+	}
+	cfg, _, err := loadConfig("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Extensions.Enabled {
+		t.Fatal("explicit extensions.enabled=false was overwritten")
+	}
+	data, err := os.ReadFile(defaultConfigName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := raw["x_custom"].(map[string]any); !ok {
+		t.Fatalf("custom top-level field not preserved:\n%s", data)
+	}
+	coordination, ok := raw["coordination"].(map[string]any)
+	if !ok || coordination["x_coordination"] != "keep" {
+		t.Fatalf("custom coordination field not preserved:\n%s", data)
+	}
+	extensions, ok := raw["extensions"].(map[string]any)
+	if !ok || extensions["x_extension"] != "keep" {
+		t.Fatalf("custom extension field not preserved:\n%s", data)
+	}
+	backups, err := filepath.Glob(defaultConfigName + ".bak-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(backups) != 1 {
+		t.Fatalf("backup count = %d, want 1 (%#v)", len(backups), backups)
+	}
+}
+
+func TestFutureConfigSchemaIsBlockedNotDowngraded(t *testing.T) {
+	temp := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+	if err := os.Chdir(temp); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(defaultConfigName, []byte(`{"schema_version":"99","profile":"future"}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	plan := buildSetupPlan("", "auto")
+	if plan["config_state"] != "unsupported-newer-schema" || plan["overall"] != "blocked" {
+		t.Fatalf("future schema plan = state %v overall %v", plan["config_state"], plan["overall"])
+	}
+	if code := repairConfig("", []string{"--yes", "--json"}); code == 0 {
+		t.Fatal("repairConfig should refuse future schema")
+	}
+	if code := configMigrate("", []string{"--write", "--json"}); code == 0 {
+		t.Fatal("configMigrate should refuse future schema")
+	}
+	if code := setupWizard("", []string{"--write", "--json"}); code == 0 {
+		t.Fatal("setup --write should refuse future schema")
+	}
+	data, err := os.ReadFile(defaultConfigName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"schema_version":"99"`) {
+		t.Fatalf("future config was modified:\n%s", data)
+	}
+}
+
+func TestSetupPlanMissingGoConfigIsReadOnlyAndVersioned(t *testing.T) {
+	temp := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+	if err := os.Chdir(temp); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("go.mod", []byte("module example.test/app\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	plan := buildSetupPlan("", "auto")
+	if plan["output_contract_version"] != "1" {
+		t.Fatalf("output contract version = %v", plan["output_contract_version"])
+	}
+	if plan["config_state"] != "missing" || plan["overall"] != "changes_required" {
+		t.Fatalf("setup plan state=%v overall=%v", plan["config_state"], plan["overall"])
+	}
+	profile := plan["profile"].(map[string]any)
+	if profile["selected"] != "go-tool" {
+		t.Fatalf("selected profile = %v", profile["selected"])
+	}
+	if fileExists(defaultConfigName) {
+		t.Fatal("read-only setup plan wrote config")
+	}
+}
+
+func TestSetupWriteIsIdempotentForValidConfig(t *testing.T) {
+	temp := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+	if err := os.Chdir(temp); err != nil {
+		t.Fatal(err)
+	}
+	if code := setupWizard("", []string{"--write", "--json"}); code != 0 {
+		t.Fatalf("first setup --write exit = %d", code)
+	}
+	if _, _, err := loadConfig(""); err != nil {
+		t.Fatal(err)
+	}
+	if code := setupWizard("", []string{"--write", "--json"}); code != 0 {
+		t.Fatalf("second setup --write exit = %d", code)
+	}
+}
+
+func TestSetupWriteBootstrapsThroughMutationGate(t *testing.T) {
+	temp := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+	if err := os.Chdir(temp); err != nil {
+		t.Fatal(err)
+	}
+	if code := run([]string{"--allow-mutation", "setup", "--write", "--json"}); code != 0 {
+		t.Fatalf("setup through run exit = %d", code)
+	}
+	if _, _, err := loadConfig(""); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestProfileDetectionKeepsPhpPrimaryWithJavascriptAssets(t *testing.T) {
+	temp := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+	if err := os.Chdir(temp); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("composer.json", []byte(`{"require":{}}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("package.json", []byte(`{"scripts":{}}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	detected := detectSetupProfile()
+	if detected["primary"] != "php-app" {
+		t.Fatalf("primary = %v, want php-app", detected["primary"])
+	}
+	if !containsString(detected["capabilities"].([]string), "javascript-assets") {
+		t.Fatalf("capabilities missing javascript-assets: %#v", detected["capabilities"])
+	}
+	if len(detected["ambiguities"].([]string)) == 0 {
+		t.Fatalf("expected supporting-toolchain ambiguity: %#v", detected)
+	}
 }
 
 func TestScribeReadmeRenderIsStable(t *testing.T) {
@@ -700,4 +912,13 @@ func TestUniqueStringsPreservesOrder(t *testing.T) {
 			t.Fatalf("uniqueStrings[%d] = %s, want %s", i, got[i], want[i])
 		}
 	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
