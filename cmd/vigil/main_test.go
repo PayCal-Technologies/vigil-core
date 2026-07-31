@@ -151,14 +151,15 @@ func TestGithubWorkflowRunsPolicyEngine(t *testing.T) {
 	if !strings.Contains(out, "vigil verify --json") || !strings.Contains(out, "vigil workflow:local --json") {
 		t.Fatalf("workflow missing expected commands:\n%s", out)
 	}
-	for _, disallowed := range []string{"actions/checkout@v4", "actions/setup-go@v5", "@latest", "go-version: 'stable'", "go-version: stable", "go build -o bin/vigil ./cmd/vigil", "git status --short"} {
+	for _, disallowed := range []string{"actions/checkout@v5", "actions/checkout@v4", "actions/setup-go@v6", "actions/setup-go@v5", "@latest", "go-version: 'stable'", "go-version: stable", "go build -o bin/vigil ./cmd/vigil", "git status --short"} {
 		if strings.Contains(out, disallowed) {
 			t.Fatalf("workflow contains unpinned value %q:\n%s", disallowed, out)
 		}
 	}
 	for _, want := range []string{
-		"actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
-		"actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff",
+		"actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+		"actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16",
+		"cache: false",
 		"go install github.com/PayCal-Technologies/vigil-core/cmd/vigil@",
 		"go-version: '1.26.0'",
 	} {
