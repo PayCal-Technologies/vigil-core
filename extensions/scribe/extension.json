@@ -1,0 +1,16 @@
+{
+  "schema_version": "1",
+  "id": "scribe",
+  "name": "Scribe README Extension",
+  "kind": "custom",
+  "status": "public",
+  "private": false,
+  "public_core": true,
+  "description": "Public README freshness commands backed by a managed local repository snapshot.",
+  "source_root": "extensions/scribe",
+  "packages": [],
+  "commands": [
+    "readme:generate",
+    "readme:check"
+  ]
+}

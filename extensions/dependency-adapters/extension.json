@@ -1,0 +1,18 @@
+{
+  "schema_version": "1",
+  "id": "dependency-adapters",
+  "name": "Dependency Adapter Extension",
+  "kind": "custom",
+  "status": "public",
+  "private": false,
+  "public_core": true,
+  "description": "Public dependency inspection and audit adapters for common package managers.",
+  "source_root": "extensions/dependency-adapters",
+  "packages": [],
+  "commands": [
+    "checks:dependency-security",
+    "deps:why",
+    "npm:audit",
+    "composer:validate"
+  ]
+}

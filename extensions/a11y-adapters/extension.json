@@ -1,0 +1,20 @@
+{
+  "schema_version": "1",
+  "id": "a11y-adapters",
+  "name": "Accessibility Adapter Extension",
+  "kind": "custom",
+  "status": "public",
+  "private": false,
+  "public_core": true,
+  "description": "Public accessibility commands that wrap locally installed browser and route audit tools.",
+  "source_root": "extensions/a11y-adapters",
+  "packages": [],
+  "commands": [
+    "a11y:inventory",
+    "a11y:smoke",
+    "a11y:ci",
+    "a11y:pa11y",
+    "a11y:lighthouse",
+    "a11y:playwright"
+  ]
+}

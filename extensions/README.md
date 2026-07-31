@@ -24,3 +24,13 @@ Required fields:
 - `source_root`: implementation location in the deployment checkout.
 - `packages`: implementation packages or source paths.
 - `commands`: commands provided by the extension.
+
+The public repository ships several extension examples with working command
+contracts:
+
+- `a11y-adapters`
+- `dependency-adapters`
+- `file-iterator`
+- `repo-health`
+- `scribe`
+- `security-adapters`

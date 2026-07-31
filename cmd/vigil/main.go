@@ -157,6 +157,30 @@ func run(args []string) int {
 			return 2
 		}
 		return filesIterate(commandArgs)
+	case "readme:generate", "readme:check":
+		if !extensionCommandLoaded(command) {
+			fmt.Fprintf(os.Stderr, "%s is not provided by a valid loaded extension\n", command)
+			return 2
+		}
+		return scribeCommand(command, commandArgs)
+	case "a11y:inventory", "a11y:smoke", "a11y:ci", "a11y:pa11y", "a11y:lighthouse", "a11y:playwright":
+		if !extensionCommandLoaded(command) {
+			fmt.Fprintf(os.Stderr, "%s is not provided by a valid loaded extension\n", command)
+			return 2
+		}
+		return accessibilityCommand(command, commandArgs)
+	case "checks:dependency-security", "deps:why", "npm:audit", "composer:validate", "security:gitleaks":
+		if !extensionCommandLoaded(command) {
+			fmt.Fprintf(os.Stderr, "%s is not provided by a valid loaded extension\n", command)
+			return 2
+		}
+		return adapterCommand(command, commandArgs)
+	case "repo:health", "history:diagnose":
+		if !extensionCommandLoaded(command) {
+			fmt.Fprintf(os.Stderr, "%s is not provided by a valid loaded extension\n", command)
+			return 2
+		}
+		return repoHealth(commandArgs)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command %q\n\n", command)
 		printHelp()
@@ -519,16 +543,40 @@ func activeCommands() []commandInfo {
 	}
 	for _, ext := range loadExtensions(extensionRoot()).Extensions {
 		for _, command := range ext.Commands {
-			commands = append(commands, commandInfo{Command: command, Source: "extension:" + ext.ID, Description: ext.Description})
+			commands = append(commands, commandInfo{Command: command, Source: "extension:" + ext.ID, Description: extensionCommandDescription(command, ext.Description)})
 		}
 	}
 	sort.Slice(commands, func(i, j int) bool { return commands[i].Command < commands[j].Command })
 	return commands
 }
 
+func extensionCommandDescription(command, fallback string) string {
+	descriptions := map[string]string{
+		"a11y:ci":                    "Run configured public accessibility adapter checks.",
+		"a11y:inventory":             "List available local accessibility tools.",
+		"a11y:lighthouse":            "Run Lighthouse accessibility audit.",
+		"a11y:pa11y":                 "Run Pa11y route audit.",
+		"a11y:playwright":            "Run Playwright accessibility tests.",
+		"a11y:smoke":                 "Run fast public accessibility smoke checks.",
+		"checks:dependency-security": "Run public dependency and scanner adapters.",
+		"composer:validate":          "Run Composer manifest validation.",
+		"deps:why":                   "Find package references in known manifests.",
+		"history:diagnose":           "Alias for repo:health.",
+		"npm:audit":                  "Run npm audit.",
+		"readme:check":               "Check Scribe managed README block freshness.",
+		"readme:generate":            "Generate Scribe managed README block.",
+		"repo:health":                "Report lightweight git-history diagnostics.",
+		"security:gitleaks":          "Run local secret scanner.",
+	}
+	if description, ok := descriptions[command]; ok {
+		return description
+	}
+	return fallback
+}
+
 func helpAccessMarker(command string) string {
 	switch command {
-	case "config:init", "config:repair", "hooks:install", "hooks:pre-commit", "hooks:pre-push", "support:bundle", "workflow:local":
+	case "config:init", "config:repair", "hooks:install", "hooks:pre-commit", "hooks:pre-push", "readme:generate", "support:bundle", "workflow:local":
 		return "r/w"
 	default:
 		return "r"
@@ -1094,6 +1142,397 @@ func filesIterate(args []string) int {
 		}
 	}
 	return 0
+}
+
+func scribeCommand(command string, args []string) int {
+	fs := flag.NewFlagSet(command, flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	path := fs.String("path", "README.md", "README path")
+	dryRun := fs.Bool("dry-run", false, "preview changes")
+	jsonOut := fs.Bool("json", false, "json output")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	current, err := os.ReadFile(*path)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	next, changed := renderScribeReadme(string(current))
+	if command == "readme:check" {
+		if *jsonOut {
+			return printStatusJSON(map[string]any{"status": okFail(boolExit(changed)), "path": *path, "changed": changed}, boolExit(changed))
+		}
+		if changed {
+			fmt.Fprintf(os.Stderr, "%s Scribe README block is stale; run: vigil readme:generate\n", statusLabel("fail"))
+			return 1
+		}
+		fmt.Printf("%s Scribe README block is current\n", statusLabel("ok"))
+		return 0
+	}
+	if *dryRun {
+		if *jsonOut {
+			return printJSON(map[string]any{"status": "ok", "path": *path, "changed": changed, "content": next})
+		}
+		fmt.Print(next)
+		return 0
+	}
+	if !changed {
+		if *jsonOut {
+			return printJSON(map[string]any{"status": "ok", "path": *path, "changed": false})
+		}
+		fmt.Printf("%s README already current: %s\n", statusLabel("ok"), *path)
+		return 0
+	}
+	if err := os.WriteFile(*path, []byte(next), 0o644); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	if *jsonOut {
+		return printJSON(map[string]any{"status": "ok", "path": *path, "changed": true})
+	}
+	fmt.Printf("%s updated README: %s\n", statusLabel("ok"), *path)
+	return 0
+}
+
+func renderScribeReadme(current string) (string, bool) {
+	block := scribeBlock()
+	begin := "<!-- scribe:begin -->"
+	end := "<!-- scribe:end -->"
+	start := strings.Index(current, begin)
+	stop := strings.Index(current, end)
+	if start >= 0 && stop > start {
+		stop += len(end)
+		next := current[:start] + strings.TrimRight(block, "\n") + current[stop:]
+		return next, next != current
+	}
+	insertAt := len(current)
+	if idx := strings.Index(current, "\n## "); idx > 0 {
+		insertAt = idx + 1
+	}
+	prefix := strings.TrimRight(current[:insertAt], "\n")
+	suffix := strings.TrimLeft(current[insertAt:], "\n")
+	next := prefix + "\n\n" + block + "\n"
+	if suffix != "" {
+		next += "\n" + suffix
+	}
+	return next, next != current
+}
+
+func scribeBlock() string {
+	var b strings.Builder
+	b.WriteString("<!-- scribe:begin -->\n")
+	b.WriteString("## Repository Snapshot\n\n")
+	b.WriteString("| Signal | Value |\n")
+	b.WriteString("| --- | --- |\n")
+	b.WriteString("| Repository | " + tableValue(filepath.Base(gitRoot())) + " |\n")
+	b.WriteString("| Dependency manifests | " + tableValue(strings.Join(existingFiles(dependencyManifestFiles()), ", ")) + " |\n")
+	b.WriteString("| Test paths | " + tableValue(strings.Join(existingTestPaths(), ", ")) + " |\n")
+	b.WriteString("| Vigil commands | " + fmt.Sprintf("%d", len(activeCommands())) + " |\n")
+	b.WriteString("\nGenerated by Vigil Scribe from local repository facts.\n")
+	b.WriteString("<!-- scribe:end -->\n")
+	return b.String()
+}
+
+func tableValue(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "not detected"
+	}
+	return strings.ReplaceAll(value, "|", "\\|")
+}
+
+func existingFiles(files []string) []string {
+	var out []string
+	for _, file := range files {
+		if fileExists(file) {
+			out = append(out, file)
+		}
+	}
+	return out
+}
+
+func existingTestPaths() []string {
+	candidates := []string{"test", "tests", "__tests__", "spec", "specs"}
+	var out []string
+	for _, path := range candidates {
+		if info, err := os.Stat(path); err == nil && info.IsDir() {
+			out = append(out, path)
+		}
+	}
+	return out
+}
+
+func accessibilityCommand(command string, args []string) int {
+	switch command {
+	case "a11y:inventory":
+		jsonOut, err := parseJSONOnly(args)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 2
+		}
+		checks := []checkResult{
+			optionalCommandCheck("npx", "npx"),
+			optionalCommandCheck("pa11y", "pa11y"),
+			optionalCommandCheck("lighthouse", "lighthouse"),
+		}
+		return checksOutput(jsonOut, "a11y_inventory", checks)
+	case "a11y:smoke", "a11y:ci":
+		return optionalAdapterChecks(command, args, []adapterSpec{
+			{Name: "pa11y", Binary: "pa11y", Args: []string{"http://localhost:3000"}},
+			{Name: "lighthouse", Binary: "lighthouse", Args: []string{"http://localhost:3000", "--only-categories=accessibility", "--quiet", "--chrome-flags=--headless"}},
+		})
+	case "a11y:pa11y":
+		target := "http://localhost:3000"
+		if len(args) > 0 && args[0] != "--json" {
+			target = args[0]
+			args = args[1:]
+		}
+		return runAdapterCommand("pa11y", "pa11y", append([]string{target}, args...)...)
+	case "a11y:lighthouse":
+		target := "http://localhost:3000"
+		if len(args) > 0 && args[0] != "--json" {
+			target = args[0]
+			args = args[1:]
+		}
+		return runAdapterCommand("lighthouse", "lighthouse", append([]string{target, "--only-categories=accessibility"}, args...)...)
+	case "a11y:playwright":
+		return runAdapterCommand("playwright", "npx", append([]string{"playwright", "test"}, args...)...)
+	default:
+		return 2
+	}
+}
+
+type adapterSpec struct {
+	Name   string
+	Binary string
+	Args   []string
+}
+
+func optionalAdapterChecks(command string, args []string, specs []adapterSpec) int {
+	jsonOut, err := parseJSONOnly(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
+	var checks []checkResult
+	for _, spec := range specs {
+		if _, err := exec.LookPath(spec.Binary); err != nil {
+			checks = append(checks, checkResult{Name: spec.Name, Status: "warn", Detail: spec.Binary + " not found"})
+			continue
+		}
+		checks = append(checks, runExternalCheck(spec.Name, spec.Binary, spec.Args...))
+	}
+	return checksOutput(jsonOut, command, checks)
+}
+
+func adapterCommand(command string, args []string) int {
+	switch command {
+	case "checks:dependency-security":
+		return dependencySecurity(args)
+	case "deps:why":
+		return depsWhy(args)
+	case "npm:audit":
+		return runAdapterCommand("npm:audit", "npm", append([]string{"audit"}, args...)...)
+	case "composer:validate":
+		return runAdapterCommand("composer:validate", "composer", append([]string{"validate"}, args...)...)
+	case "security:gitleaks":
+		return runAdapterCommand("security:gitleaks", "gitleaks", append([]string{"detect"}, args...)...)
+	default:
+		return 2
+	}
+}
+
+func dependencySecurity(args []string) int {
+	jsonOut, err := parseJSONOnly(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
+	var checks []checkResult
+	if fileExists("package.json") {
+		checks = append(checks, runExternalIfAvailable("npm:audit", "npm", "audit", "--audit-level=moderate"))
+	}
+	if fileExists("composer.json") {
+		checks = append(checks, runExternalIfAvailable("composer:audit", "composer", "audit"))
+	}
+	if gitRoot() != "" {
+		checks = append(checks, runExternalIfAvailable("security:gitleaks", "gitleaks", "detect", "--redact"))
+	}
+	if len(checks) == 0 {
+		checks = append(checks, checkResult{Name: "dependency-security", Status: "warn", Detail: "no supported manifests or tools detected"})
+	}
+	return checksOutput(jsonOut, "dependency_security", checks)
+}
+
+func depsWhy(args []string) int {
+	fs := flag.NewFlagSet("deps:why", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	jsonOut := fs.Bool("json", false, "json output")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "Usage: vigil deps:why [--json] <package>")
+		return 2
+	}
+	name := fs.Arg(0)
+	var findings []string
+	for _, file := range dependencyManifestFiles() {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			continue
+		}
+		if strings.Contains(strings.ToLower(string(data)), strings.ToLower(name)) {
+			findings = append(findings, file)
+		}
+	}
+	if *jsonOut {
+		return printJSON(map[string]any{"status": okFail(boolExit(len(findings) == 0)), "package": name, "files": findings})
+	}
+	if len(findings) == 0 {
+		fmt.Fprintf(os.Stderr, "%s package not found in known manifests: %s\n", statusLabel("fail"), name)
+		return 1
+	}
+	for _, file := range findings {
+		fmt.Println(file)
+	}
+	return 0
+}
+
+func dependencyManifestFiles() []string {
+	return []string{"go.mod", "go.sum", "package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "composer.json", "composer.lock", "Cargo.toml", "Cargo.lock", "requirements.txt", "pyproject.toml"}
+}
+
+func runAdapterCommand(name, binary string, args ...string) int {
+	if _, err := exec.LookPath(binary); err != nil {
+		fmt.Fprintf(os.Stderr, "%s %s not found\n", statusLabel("fail"), binary)
+		return 1
+	}
+	cmd := exec.Command(binary, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return exitErr.ExitCode()
+		}
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	fmt.Printf("%s %s\n", statusLabel("ok"), name)
+	return 0
+}
+
+func runExternalIfAvailable(name, binary string, args ...string) checkResult {
+	if _, err := exec.LookPath(binary); err != nil {
+		return checkResult{Name: name, Status: "warn", Detail: binary + " not found"}
+	}
+	return runExternalCheck(name, binary, args...)
+}
+
+func optionalCommandCheck(command, label string) checkResult {
+	if path, err := exec.LookPath(command); err == nil {
+		return checkResult{Name: label, Status: "ok", Detail: path}
+	}
+	return checkResult{Name: label, Status: "warn", Detail: command + " not found"}
+}
+
+func runExternalCheck(name, binary string, args ...string) checkResult {
+	out, code := runCommand(binary, args...)
+	if code == 0 {
+		return checkResult{Name: name, Status: "ok", Detail: trimOneLine(out)}
+	}
+	return checkResult{Name: name, Status: "fail", Detail: trimOneLine(out)}
+}
+
+func checksOutput(jsonOut bool, name string, checks []checkResult) int {
+	failures := 0
+	for _, check := range checks {
+		if check.Status == "fail" {
+			failures++
+		}
+	}
+	status := okFail(failures)
+	if jsonOut {
+		return printStatusJSON(map[string]any{"status": status, "check": name, "checks": checks}, failures)
+	}
+	for _, check := range checks {
+		fmt.Printf("%s %s: %s\n", statusLabel(check.Status), check.Name, check.Detail)
+	}
+	return boolExit(failures > 0)
+}
+
+func repoHealth(args []string) int {
+	jsonOut, err := parseJSONOnly(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
+	if gitRoot() == "" {
+		fmt.Fprintln(os.Stderr, "not inside a git repository")
+		return 1
+	}
+	commits := strings.TrimSpace(firstLine(gitLines("rev-list", "--count", "HEAD")))
+	contributors := gitLines("shortlog", "-sn", "--all")
+	churn := gitLines("log", "--name-only", "--pretty=format:")
+	counts := map[string]int{}
+	for _, file := range churn {
+		file = strings.TrimSpace(file)
+		if file != "" {
+			counts[file]++
+		}
+	}
+	hotspots := topCounts(counts, 10)
+	payload := map[string]any{"status": "ok", "commit_count": commits, "contributors": contributors, "hotspots": hotspots}
+	if jsonOut {
+		return printJSON(payload)
+	}
+	fmt.Printf("%s commits=%s contributors=%d hotspots=%d\n", statusLabel("ok"), commits, len(contributors), len(hotspots))
+	for _, item := range hotspots {
+		fmt.Printf("%s\t%d\n", item.Name, item.Count)
+	}
+	return 0
+}
+
+type countItem struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
+func topCounts(counts map[string]int, limit int) []countItem {
+	items := make([]countItem, 0, len(counts))
+	for name, count := range counts {
+		items = append(items, countItem{Name: name, Count: count})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Count == items[j].Count {
+			return items[i].Name < items[j].Name
+		}
+		return items[i].Count > items[j].Count
+	})
+	if len(items) > limit {
+		items = items[:limit]
+	}
+	return items
+}
+
+func firstLine(lines []string) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	return lines[0]
+}
+
+func trimOneLine(output string) string {
+	output = strings.TrimSpace(output)
+	if output == "" {
+		return "exit 0"
+	}
+	output = strings.ReplaceAll(output, "\n", " ")
+	if len(output) > 160 {
+		return output[:160] + "..."
+	}
+	return output
 }
 
 func matchFileGlob(pattern, rel string) (bool, error) {

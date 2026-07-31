@@ -1,0 +1,16 @@
+{
+  "schema_version": "1",
+  "id": "repo-health",
+  "name": "Repository Health Extension",
+  "kind": "custom",
+  "status": "public",
+  "private": false,
+  "public_core": true,
+  "description": "Public git-history diagnostics for churn, contributors, and hotspots.",
+  "source_root": "extensions/repo-health",
+  "packages": [],
+  "commands": [
+    "repo:health",
+    "history:diagnose"
+  ]
+}

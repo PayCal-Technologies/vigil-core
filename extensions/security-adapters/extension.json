@@ -1,0 +1,15 @@
+{
+  "schema_version": "1",
+  "id": "security-adapters",
+  "name": "Security Adapter Extension",
+  "kind": "custom",
+  "status": "public",
+  "private": false,
+  "public_core": true,
+  "description": "Public security adapter commands for local scanners.",
+  "source_root": "extensions/security-adapters",
+  "packages": [],
+  "commands": [
+    "security:gitleaks"
+  ]
+}

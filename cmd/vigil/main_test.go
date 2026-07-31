@@ -18,6 +18,12 @@ func TestActiveCommandsIncludePublicCICD(t *testing.T) {
 		"checks:public-assumptions",
 		"checks:command-catalog",
 		"files:iterate",
+		"readme:generate",
+		"readme:check",
+		"a11y:inventory",
+		"checks:dependency-security",
+		"security:gitleaks",
+		"repo:health",
 	} {
 		if !commands[want] {
 			t.Fatalf("active command %s missing", want)
@@ -76,5 +82,20 @@ func TestApplyConfigDefaultsDropsInvalidPublicAssumptionPatterns(t *testing.T) {
 	}
 	if len(cfg.PublicAssumptionPatterns) != 1 || cfg.PublicAssumptionPatterns[0] != "(?i)sample-pattern" {
 		t.Fatalf("unexpected repaired patterns: %#v", cfg.PublicAssumptionPatterns)
+	}
+}
+
+func TestScribeReadmeRenderIsStable(t *testing.T) {
+	input := "# App\n\nHuman intro.\n\n## Install\n"
+	next, changed := renderScribeReadme(input)
+	if !changed {
+		t.Fatal("expected Scribe render to add managed block")
+	}
+	again, changed := renderScribeReadme(next)
+	if changed {
+		t.Fatalf("expected Scribe render to be stable, changed to:\n%s", again)
+	}
+	if next != again {
+		t.Fatal("stable Scribe render changed content")
 	}
 }
