@@ -21,42 +21,42 @@
   "command_contracts": [
     {
       "command": "checks:dependency-security",
-      "access": "r",
+      "access": "read",
       "usage": "vigil checks:dependency-security [--json]",
       "description": "Run public dependency and scanner adapters.",
       "install_hint": "install npm, Composer, or gitleaks depending on project manifests"
     },
     {
       "command": "npm:audit",
-      "access": "r",
+      "access": "read",
       "usage": "vigil npm:audit [args]",
       "description": "Run npm audit.",
       "install_hint": "install Node.js and npm"
     },
     {
       "command": "composer:validate",
-      "access": "r",
+      "access": "read",
       "usage": "vigil composer:validate [args]",
       "description": "Run Composer manifest validation.",
       "install_hint": "install Composer"
     },
     {
       "command": "php:lint",
-      "access": "r",
+      "access": "read",
       "usage": "vigil php:lint [--json]",
       "description": "Run PHP syntax checks.",
       "install_hint": "install PHP"
     },
     {
       "command": "phpstan:analyse",
-      "access": "r",
+      "access": "read",
       "usage": "vigil phpstan:analyse [args]",
       "description": "Run PHPStan analysis.",
       "install_hint": "install PHPStan"
     },
     {
       "command": "javascript:quality",
-      "access": "r",
+      "access": "read",
       "usage": "vigil javascript:quality [--json]",
       "description": "Run public JavaScript quality adapters.",
       "install_hint": "install Node.js and npm"

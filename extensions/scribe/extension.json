@@ -26,7 +26,7 @@
     },
     {
       "command": "readme:check",
-      "access": "r",
+      "access": "read",
       "usage": "vigil readme:check [--json]",
       "description": "Check Scribe managed README block freshness."
     }

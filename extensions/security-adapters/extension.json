@@ -15,7 +15,7 @@
   "command_contracts": [
     {
       "command": "security:gitleaks",
-      "access": "r",
+      "access": "read",
       "usage": "vigil security:gitleaks [args]",
       "description": "Run local secret scanner.",
       "install_hint": "brew install gitleaks"
