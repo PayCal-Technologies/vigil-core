@@ -772,6 +772,15 @@ func TestFutureConfigSchemaIsBlockedNotDowngraded(t *testing.T) {
 	if plan["config_state"] != "unsupported-newer-schema" || plan["overall"] != "blocked" {
 		t.Fatalf("future schema plan = state %v overall %v", plan["config_state"], plan["overall"])
 	}
+	if plan["execution_status"] != "blocked" {
+		t.Fatalf("future schema execution_status = %v, want blocked", plan["execution_status"])
+	}
+	if got := len(plan["proposed_mutations"].([]map[string]any)); got != 0 {
+		t.Fatalf("future schema proposed mutation count = %d, want 0", got)
+	}
+	if got := len(plan["recommended_actions"].([]map[string]any)); got != 1 {
+		t.Fatalf("blocked plan recommended action count = %d, want 1", got)
+	}
 	if code := repairConfig("", []string{"--yes", "--json"}); code == 0 {
 		t.Fatal("repairConfig should refuse future schema")
 	}
@@ -807,12 +816,23 @@ func TestSetupPlanMissingGoConfigIsReadOnlyAndVersioned(t *testing.T) {
 	if plan["output_contract_version"] != "1" {
 		t.Fatalf("output contract version = %v", plan["output_contract_version"])
 	}
+	if plan["execution_status"] != "planned" {
+		t.Fatalf("execution_status = %v", plan["execution_status"])
+	}
 	if plan["config_state"] != "missing" || plan["overall"] != "changes_required" {
 		t.Fatalf("setup plan state=%v overall=%v", plan["config_state"], plan["overall"])
+	}
+	validation := plan["validation"].(map[string]any)
+	currentIssues := validation["current_issues"].([]configIssue)
+	if len(currentIssues) != 1 || currentIssues[0].Code != "config.missing" {
+		t.Fatalf("current_issues = %#v, want config.missing", currentIssues)
 	}
 	profile := plan["profile"].(map[string]any)
 	if profile["selected"] != "go-tool" {
 		t.Fatalf("selected profile = %v", profile["selected"])
+	}
+	if profile["profile_confidence"] != "certain" {
+		t.Fatalf("profile_confidence = %v", profile["profile_confidence"])
 	}
 	if fileExists(defaultConfigName) {
 		t.Fatal("read-only setup plan wrote config")
@@ -834,6 +854,10 @@ func TestSetupWriteIsIdempotentForValidConfig(t *testing.T) {
 	}
 	if _, _, err := loadConfig(""); err != nil {
 		t.Fatal(err)
+	}
+	plan := buildSetupPlan("", "auto")
+	if got := len(plan["proposed_mutations"].([]map[string]any)); got != 0 {
+		t.Fatalf("valid setup proposed mutation count = %d, want 0", got)
 	}
 	if code := setupWizard("", []string{"--write", "--json"}); code != 0 {
 		t.Fatalf("second setup --write exit = %d", code)
@@ -878,11 +902,33 @@ func TestProfileDetectionKeepsPhpPrimaryWithJavascriptAssets(t *testing.T) {
 	if detected["primary"] != "php-app" {
 		t.Fatalf("primary = %v, want php-app", detected["primary"])
 	}
+	if detected["profile_confidence"] != "ambiguous" {
+		t.Fatalf("profile_confidence = %v, want ambiguous", detected["profile_confidence"])
+	}
 	if !containsString(detected["capabilities"].([]string), "javascript-assets") {
 		t.Fatalf("capabilities missing javascript-assets: %#v", detected["capabilities"])
 	}
 	if len(detected["ambiguities"].([]string)) == 0 {
 		t.Fatalf("expected supporting-toolchain ambiguity: %#v", detected)
+	}
+}
+
+func TestProfileDetectionUsesEmptyArraysForGenericCollections(t *testing.T) {
+	temp := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+	if err := os.Chdir(temp); err != nil {
+		t.Fatal(err)
+	}
+	detected := detectSetupProfile()
+	if capabilities := detected["capabilities"].([]string); len(capabilities) != 0 {
+		t.Fatalf("generic capabilities = %#v, want empty array", capabilities)
+	}
+	if ambiguities := detected["ambiguities"].([]string); len(ambiguities) != 0 {
+		t.Fatalf("generic ambiguities = %#v, want empty array", ambiguities)
 	}
 }
 

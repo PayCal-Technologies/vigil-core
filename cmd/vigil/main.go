@@ -731,6 +731,8 @@ func setupWizard(configPath string, args []string) int {
 	if *write {
 		if plan["overall"] == "blocked" {
 			message := "setup write blocked by current repository state"
+			plan["mode"] = "write"
+			plan["execution_status"] = "blocked"
 			if *jsonOut {
 				return printStatusJSON(withSetupError(plan, message), 1)
 			}
@@ -738,8 +740,11 @@ func setupWizard(configPath string, args []string) int {
 			return 1
 		}
 		if plan["config_state"] == "valid-v2" && !*force {
+			plan["mode"] = "write"
+			plan["execution_status"] = "skipped"
 			plan["written"] = false
 			plan["changed"] = false
+			plan["backup_path"] = "none"
 			delete(plan, "proposed_config")
 			delete(plan, "raw_document")
 			if *jsonOut {
@@ -759,6 +764,8 @@ func setupWizard(configPath string, args []string) int {
 		writeResult, err := atomicWriteFile(path, data, fileExists(path))
 		if err != nil {
 			if *jsonOut {
+				plan["mode"] = "write"
+				plan["execution_status"] = "failed"
 				return printStatusJSON(withSetupError(plan, err.Error()), 1)
 			}
 			fmt.Fprintln(os.Stderr, err)
@@ -766,15 +773,24 @@ func setupWizard(configPath string, args []string) int {
 		}
 		if _, _, err := loadConfig(path); err != nil {
 			if *jsonOut {
+				plan["mode"] = "write"
+				plan["execution_status"] = "failed"
 				return printStatusJSON(withSetupError(plan, "post-write validation failed: "+err.Error()), 1)
 			}
 			fmt.Fprintln(os.Stderr, "post-write validation failed: "+err.Error())
 			return 1
 		}
 		plan = buildSetupPlan(configPath, *profile)
+		plan["mode"] = "write"
+		plan["execution_status"] = "applied"
 		plan["written"] = true
-		plan["backup_path"] = writeResult.BackupPath
+		plan["backup_path"] = setupBackupPath(writeResult.BackupPath)
 	} else {
+		if plan["overall"] == "blocked" {
+			plan["execution_status"] = "blocked"
+		} else {
+			plan["execution_status"] = "planned"
+		}
 		plan["written"] = false
 	}
 	delete(plan, "proposed_config")
@@ -807,11 +823,15 @@ func buildSetupPlan(configPath string, requestedProfile string) map[string]any {
 		if !os.IsNotExist(err) {
 			state = "unreadable"
 			blockers = append(blockers, err.Error())
+			issues = append(issues, configIssue{Field: "config", Code: "config.unreadable", Message: err.Error()})
+		} else {
+			issues = append(issues, configIssue{Field: "config", Code: "config.missing", Message: "config file does not exist; setup --write can create it"})
 		}
 	} else {
 		doc, err := parseConfigDocument(data)
 		if err != nil {
 			state = "malformed"
+			issues = append(issues, configIssue{Field: "config", Code: "config.malformed", Message: "config is malformed JSON; setup --write can replace it after creating a backup"})
 			warnings = append(warnings, "config is malformed JSON; setup --write will replace it after creating a backup")
 		} else {
 			rawDoc = doc.Raw
@@ -839,7 +859,8 @@ func buildSetupPlan(configPath string, requestedProfile string) map[string]any {
 	if gitRoot() == "" {
 		warnings = append(warnings, "not inside a Git checkout; Git hooks and GitHub handoff are optional/skipped")
 	}
-	validationAfter := validateConfigIssues(proposed)
+	validationAfter := nonNilConfigIssues(validateConfigIssues(proposed))
+	issues = nonNilConfigIssues(issues)
 	dimensions := map[string]string{
 		"core_config":              readinessStatus(len(validationAfter) == 0, state),
 		"policy_preservation":      policyPreservationStatus(state, policyDiff),
@@ -857,41 +878,72 @@ func buildSetupPlan(configPath string, requestedProfile string) map[string]any {
 		overall = "ready"
 	}
 	proposedMutations := []map[string]any{}
-	if len(blockers) == 0 {
+	if len(blockers) == 0 && state != "valid-v2" {
 		proposedMutations = append(proposedMutations, map[string]any{"id": "write-config", "mutates": true, "requires_confirmation": true, "path": path})
+	}
+	recommendedActions := setupRecommendedActions(overall)
+	executionStatus := "planned"
+	if overall == "blocked" {
+		executionStatus = "blocked"
 	}
 	return map[string]any{
 		"output_contract_version": "1",
 		"status":                  okFail(len(blockers)),
 		"overall":                 overall,
 		"mode":                    "preview",
+		"execution_status":        executionStatus,
 		"config_path":             path,
 		"config_state":            state,
 		"profile": map[string]any{
-			"selected":     selectedProfile,
-			"requested":    requestedProfile,
-			"detected":     detected["primary"],
-			"confidence":   detected["confidence"],
-			"evidence":     detected["evidence"],
-			"capabilities": detected["capabilities"],
-			"ambiguities":  detected["ambiguities"],
+			"selected":            selectedProfile,
+			"requested":           requestedProfile,
+			"detected":            detected["primary"],
+			"confidence":          detected["confidence"],
+			"profile_confidence":  detected["profile_confidence"],
+			"evidence":            detected["evidence"],
+			"detected_indicators": detected["detected_indicators"],
+			"capabilities":        detected["capabilities"],
+			"ambiguities":         detected["ambiguities"],
 		},
-		"readiness":          dimensions,
-		"blockers":           blockers,
-		"warnings":           warnings,
-		"validation":         map[string]any{"current_issues": issues, "proposed_issues": validationAfter},
-		"policy_diff":        policyDiff,
-		"proposed_mutations": proposedMutations,
-		"recommended_actions": []map[string]any{
-			{"id": "validate", "command": "vigil config:validate --json", "mutates": false, "requires_confirmation": false},
-			{"id": "plan", "command": "vigil plan --json", "mutates": false, "requires_confirmation": false},
-			{"id": "verify", "command": "vigil verify --json", "mutates": false, "requires_confirmation": false},
-			{"id": "github-actions-helper", "command": "vigil github:init-ci", "mutates": false, "requires_confirmation": false},
-			{"id": "git-hooks", "command": "vigil --allow-mutation hooks:install", "mutates": true, "requires_confirmation": true},
-		},
-		"proposed_config": proposed,
-		"raw_document":    rawDoc,
+		"readiness":           dimensions,
+		"blockers":            blockers,
+		"warnings":            warnings,
+		"validation":          map[string]any{"current_issues": issues, "proposed_issues": validationAfter},
+		"policy_diff":         policyDiff,
+		"proposed_mutations":  proposedMutations,
+		"recommended_actions": recommendedActions,
+		"proposed_config":     proposed,
+		"raw_document":        rawDoc,
 	}
+}
+
+func setupBackupPath(path string) string {
+	if strings.TrimSpace(path) == "" {
+		return "none"
+	}
+	return path
+}
+
+func setupRecommendedActions(overall string) []map[string]any {
+	if overall == "blocked" {
+		return []map[string]any{
+			{"id": "validate", "command": "vigil config:validate --json", "mutates": false, "requires_confirmation": false},
+		}
+	}
+	return []map[string]any{
+		{"id": "validate", "command": "vigil config:validate --json", "mutates": false, "requires_confirmation": false},
+		{"id": "plan", "command": "vigil plan --json", "mutates": false, "requires_confirmation": false},
+		{"id": "verify", "command": "vigil verify --json", "mutates": false, "requires_confirmation": false},
+		{"id": "github-actions-helper", "command": "vigil github:init-ci", "mutates": false, "requires_confirmation": false},
+		{"id": "git-hooks", "command": "vigil --allow-mutation hooks:install", "mutates": true, "requires_confirmation": true},
+	}
+}
+
+func nonNilConfigIssues(issues []configIssue) []configIssue {
+	if issues == nil {
+		return []configIssue{}
+	}
+	return issues
 }
 
 func withSetupError(plan map[string]any, message string) map[string]any {
@@ -901,6 +953,9 @@ func withSetupError(plan map[string]any, message string) map[string]any {
 	}
 	next["status"] = "fail"
 	next["overall"] = "blocked"
+	if _, ok := next["execution_status"]; !ok {
+		next["execution_status"] = "failed"
+	}
 	next["blockers"] = append(stringSliceFromAny(next["blockers"]), message)
 	delete(next, "proposed_config")
 	delete(next, "raw_document")
@@ -976,7 +1031,19 @@ func detectSetupProfile() map[string]any {
 	if len(evidence) == 0 {
 		evidence = append(evidence, "no known profile files detected")
 	}
-	return map[string]any{"primary": primary, "confidence": confidence, "evidence": evidence, "capabilities": uniqueStrings(capabilities), "ambiguities": ambiguities}
+	profileConfidence := "certain"
+	if confidence != "high" || len(ambiguities) > 0 {
+		profileConfidence = "ambiguous"
+	}
+	return map[string]any{
+		"primary":             primary,
+		"confidence":          confidence,
+		"profile_confidence":  profileConfidence,
+		"evidence":            evidence,
+		"detected_indicators": append([]string{}, evidence...),
+		"capabilities":        uniqueStrings(capabilities),
+		"ambiguities":         uniqueStrings(ambiguities),
+	}
 }
 
 func hasFileWithExtension(extensions []string) bool {
@@ -3185,7 +3252,7 @@ func mapKeys(values map[string]bool) []string {
 
 func uniqueStrings(values []string) []string {
 	seen := map[string]bool{}
-	var out []string
+	out := []string{}
 	for _, value := range values {
 		if value == "" || seen[value] {
 			continue
