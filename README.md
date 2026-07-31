@@ -18,6 +18,14 @@ This public repository contains the source-available core:
 Extension implementations can be added by deployments that need project-specific
 commands or policy surfaces.
 
+## Current Public Surface
+
+Vigil Core is the public, standalone CLI foundation. It provides config
+diagnostics, local workflow gates, hooks, Scribe README automation, public
+adapter extensions, release-readiness checks, and a canonical GitHub CI/CD
+extension. Commands are composed from core plus loaded extensions, so extension
+commands appear only when their manifests are valid and enabled.
+
 <!-- scribe:begin -->
 ## Repository Snapshot
 
