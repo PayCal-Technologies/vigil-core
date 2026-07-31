@@ -165,36 +165,22 @@ func run(args []string) int {
 }
 
 func printHelp() {
-	fmt.Println(`Vigil Core
-
-Usage:
-  vigil [--config PATH] <command> [args]
-
-Commands:
-  version
-  list [--json]
-  doctor [--json]
-  status [--json]
-  plan [--json]
-  workflow:local [--json] [--dry-run]
-  verify [--json]
-  hooks:install
-  hooks:pre-commit
-  hooks:pre-push
-  checks:staged-sensitive [--json]
-  checks:workspace-hygiene [--json]
-  checks:command-catalog [--json]
-  checks:public-assumptions [--json]
-  deps:inventory [--json]
-  support:bundle [--json] [--dry-run]
-  completion bash|zsh|fish
-  config:schema [--json]
-  config:init [--profile=go-tool|static-site|generic] [--write] [--force] [--json]
-  config:validate [--json]
-  config:repair [--yes] [--profile=go-tool|static-site|generic]
-  extensions:list [--json]
-  extensions:doctor [--json]
-  files:iterate --root=PATH --glob=PATTERN [--jsonl]`)
+	commands := activeCommands()
+	width := 0
+	for _, command := range commands {
+		if len(command.Command) > width {
+			width = len(command.Command)
+		}
+	}
+	fmt.Println("Vigil Core")
+	fmt.Println()
+	fmt.Println("Usage:")
+	fmt.Println("  vigil [--config PATH] <command> [args]")
+	fmt.Println()
+	fmt.Println("core")
+	for _, command := range commands {
+		fmt.Printf("  %-3s %-*s   %s\n", helpAccessMarker(command.Command), width, command.Command, compactHelpDescription(command.Description))
+	}
 }
 
 type commandInfo struct {
@@ -538,6 +524,58 @@ func activeCommands() []commandInfo {
 	}
 	sort.Slice(commands, func(i, j int) bool { return commands[i].Command < commands[j].Command })
 	return commands
+}
+
+func helpAccessMarker(command string) string {
+	switch command {
+	case "config:init", "config:repair", "hooks:install", "hooks:pre-commit", "hooks:pre-push", "support:bundle", "workflow:local":
+		return "r/w"
+	default:
+		return "r"
+	}
+}
+
+func compactHelpDescription(description string) string {
+	description = strings.TrimSpace(description)
+	replacements := []struct {
+		old string
+		new string
+	}{
+		{"Generate or write ", "Create "},
+		{"Interactively repair ", "Repair "},
+		{"Validate ", "Check "},
+		{"Generate ", "Create "},
+		{"Install ", "Install "},
+		{"Inventory ", "List "},
+		{"Summarize ", "Show "},
+		{"Detect ", "Find "},
+		{"Explain ", "Show "},
+		{"Print ", "Show "},
+		{"Run ", "Run "},
+		{"Scan ", "Scan "},
+		{"Write or preview ", "Create "},
+	}
+	for _, replacement := range replacements {
+		if strings.HasPrefix(description, replacement.old) {
+			description = replacement.new + strings.TrimPrefix(description, replacement.old)
+			break
+		}
+	}
+	for _, separator := range []string{" with ", " for ", " from ", " into ", " before ", ";", ","} {
+		if idx := strings.Index(description, separator); idx > 0 {
+			description = description[:idx]
+			break
+		}
+	}
+	const max = 36
+	if len(description) <= max {
+		return description
+	}
+	trimmed := strings.TrimSpace(description[:max-1])
+	if idx := strings.LastIndex(trimmed, " "); idx >= 18 {
+		trimmed = trimmed[:idx]
+	}
+	return trimmed + "..."
 }
 
 func extensionCommandLoaded(command string) bool {
