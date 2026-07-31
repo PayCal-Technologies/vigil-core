@@ -84,7 +84,7 @@ func TestGithubWorkflowRunsPolicyEngine(t *testing.T) {
 	for _, want := range []string{
 		"actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
 		"actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff",
-		"go install github.com/PayCal-Technologies/vigil-core/cmd/vigil@f48f19c3764a5a256455cc1d858d74eda2775745",
+		"go install github.com/PayCal-Technologies/vigil-core/cmd/vigil@7ae14422483359eb6a9d0c25cb827e7de392012d",
 		"go-version: '1.26.0'",
 	} {
 		if !strings.Contains(out, want) {

@@ -20,7 +20,7 @@ const (
 	version             = "0.1.0"
 	configSchemaVersion = "1"
 	defaultConfigName   = "vigil.config.json"
-	vigilCoreInstallRef = "f48f19c3764a5a256455cc1d858d74eda2775745"
+	vigilCoreInstallRef = "7ae14422483359eb6a9d0c25cb827e7de392012d"
 	vigilCoreGoVersion  = "1.26.0"
 )
 
