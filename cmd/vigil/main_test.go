@@ -100,6 +100,20 @@ func TestGuardsSummaryUsesCanonicalAccess(t *testing.T) {
 	}
 }
 
+func TestActiveCommandsExposeWriteFlags(t *testing.T) {
+	commands := activeCommands()
+	for _, command := range commands {
+		if command.Command != "github:init-ci" {
+			continue
+		}
+		if len(command.WriteFlags) != 1 || command.WriteFlags[0] != "--write" {
+			t.Fatalf("github:init-ci write flags = %#v, want --write", command.WriteFlags)
+		}
+		return
+	}
+	t.Fatal("github:init-ci missing")
+}
+
 func TestInvalidExtensionManifestCannotContributeActiveCommand(t *testing.T) {
 	temp := t.TempDir()
 	oldWd, err := os.Getwd()
@@ -274,11 +288,92 @@ func TestExtensionCommandAccessRequiresMutationAuthority(t *testing.T) {
 	if !requiresMutationAuthority("github:init-ci", []string{"--write"}) {
 		t.Fatal("github:init-ci --write should require mutation authority from explicit command handling")
 	}
+	if requiresMutationAuthority("github:init-ci", nil) {
+		t.Fatal("github:init-ci without --write should be preview-safe")
+	}
 	if !requiresMutationAuthority("readme:generate", nil) {
 		t.Fatal("readme:generate should require mutation authority from extension contract")
 	}
 	if requiresMutationAuthority("readme:check", nil) {
 		t.Fatal("readme:check should remain read-only")
+	}
+}
+
+func TestGenericConditionalExtensionRequiresMutationOnlyForWriteFlags(t *testing.T) {
+	temp := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+	if err := os.Chdir(temp); err != nil {
+		t.Fatal(err)
+	}
+	extDir := filepath.Join(temp, "extensions", "conditional")
+	if err := os.MkdirAll(extDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{
+  "schema_version": "1",
+  "id": "conditional",
+  "name": "Conditional Extension",
+  "kind": "custom",
+  "status": "local",
+  "private": false,
+  "public_core": true,
+  "description": "conditional extension",
+  "source_root": "extensions/conditional",
+  "packages": [],
+  "commands": ["conditional:preview"],
+  "command_contracts": [
+    {"command": "conditional:preview", "access": "conditional-write", "write_flags": ["--write", "--execute"], "usage": "vigil conditional:preview [--write]", "description": "conditional"}
+  ]
+}`
+	if err := os.WriteFile(filepath.Join(extDir, "extension.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if report := loadExtensions(extensionRoot()); report.Status != "ok" {
+		t.Fatalf("extension report status = %q issues=%#v", report.Status, report.Issues)
+	}
+	if requiresMutationAuthority("conditional:preview", nil) {
+		t.Fatal("conditional extension preview should not require mutation authority")
+	}
+	if !requiresMutationAuthority("conditional:preview", []string{"--write"}) {
+		t.Fatal("conditional extension --write should require mutation authority")
+	}
+	if !requiresMutationAuthority("conditional:preview", []string{"--execute=true"}) {
+		t.Fatal("conditional extension --execute=true should require mutation authority")
+	}
+}
+
+func TestConditionalExtensionRequiresWriteFlags(t *testing.T) {
+	ext := extensionManifest{
+		SchemaVersion: configSchemaVersion,
+		ID:            "conditional",
+		Name:          "Conditional Extension",
+		Kind:          "custom",
+		Status:        "local",
+		Description:   "conditional extension",
+		SourceRoot:    "extensions/conditional",
+		Commands:      []string{"conditional:preview"},
+		CommandContracts: []extensionCommandContract{{
+			Command:     "conditional:preview",
+			Access:      "conditional-write",
+			Usage:       "vigil conditional:preview",
+			Description: "conditional",
+		}},
+		Path: "extensions/conditional/extension.json",
+	}
+	issues := validateExtension(ext)
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue, "conditional-write missing write_flags") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("missing write_flags issue: %#v", issues)
 	}
 }
 

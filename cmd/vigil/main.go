@@ -84,6 +84,7 @@ type extensionManifest struct {
 type extensionCommandContract struct {
 	Command     string   `json:"command"`
 	Access      string   `json:"access"`
+	WriteFlags  []string `json:"write_flags,omitempty"`
 	Usage       string   `json:"usage"`
 	Description string   `json:"description"`
 	Examples    []string `json:"examples,omitempty"`
@@ -287,6 +288,7 @@ type commandInfo struct {
 	Source      string   `json:"source"`
 	Description string   `json:"description"`
 	Access      string   `json:"access,omitempty"`
+	WriteFlags  []string `json:"write_flags,omitempty"`
 	AutoEnabled bool     `json:"auto_enabled,omitempty"`
 	AutoReason  string   `json:"auto_reason,omitempty"`
 	Usage       string   `json:"usage,omitempty"`
@@ -357,24 +359,47 @@ func requiresMutationAuthority(command string, args []string) bool {
 	case "support:bundle":
 		return !hasFlag(args, "dry-run")
 	default:
-		return extensionCommandRequiresMutation(command)
+		return extensionCommandRequiresMutation(command, args)
 	}
 }
 
-func extensionCommandRequiresMutation(command string) bool {
-	access := extensionCommandAccess(command)
-	return access == "write" || access == "conditional-write"
+func extensionCommandRequiresMutation(command string, args []string) bool {
+	contract, ok := extensionCommandContractFor(command)
+	if !ok {
+		return false
+	}
+	switch strings.TrimSpace(contract.Access) {
+	case "write":
+		return true
+	case "conditional-write":
+		for _, flag := range contract.WriteFlags {
+			if hasFlag(args, strings.TrimPrefix(flag, "--")) {
+				return true
+			}
+		}
+		return false
+	default:
+		return false
+	}
 }
 
 func extensionCommandAccess(command string) string {
+	contract, ok := extensionCommandContractFor(command)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(contract.Access)
+}
+
+func extensionCommandContractFor(command string) (extensionCommandContract, bool) {
 	for _, ext := range loadExtensions(extensionRoot()).Extensions {
 		for _, contract := range ext.CommandContracts {
 			if contract.Command == command {
-				return strings.TrimSpace(contract.Access)
+				return contract, true
 			}
 		}
 	}
-	return ""
+	return extensionCommandContract{}, false
 }
 
 func mutationRequirementsSatisfied(configPath string, command string, authority authorityArgs) bool {
@@ -1085,12 +1110,15 @@ func activeCommands() []commandInfo {
 			if strings.TrimSpace(contract.Description) != "" {
 				description = contract.Description
 			}
-			commands = append(commands, commandInfo{Command: command, Source: "extension:" + ext.ID, Description: description, Access: contract.Access, Usage: contract.Usage, InstallHint: contract.InstallHint, Examples: contract.Examples})
+			commands = append(commands, commandInfo{Command: command, Source: "extension:" + ext.ID, Description: description, Access: contract.Access, WriteFlags: append([]string{}, contract.WriteFlags...), Usage: contract.Usage, InstallHint: contract.InstallHint, Examples: contract.Examples})
 		}
 	}
 	for i := range commands {
 		if strings.TrimSpace(commands[i].Access) == "" {
 			commands[i].Access = commandAccess(commands[i].Command)
+		}
+		if len(commands[i].WriteFlags) == 0 {
+			commands[i].WriteFlags = commandWriteFlags(commands[i].Command)
 		}
 		if autoEnabledCommand(commands[i].Command) {
 			commands[i].AutoEnabled = true
@@ -1159,6 +1187,20 @@ func commandAccess(command string) string {
 		return "conditional-write"
 	default:
 		return "read"
+	}
+}
+
+func commandWriteFlags(command string) []string {
+	if contract, ok := extensionCommandContractFor(command); ok {
+		return append([]string{}, contract.WriteFlags...)
+	}
+	switch command {
+	case "config:init":
+		return []string{"--write", "--force"}
+	case "config:migrate", "github:init-ci", "init:ci":
+		return []string{"--write"}
+	default:
+		return nil
 	}
 }
 
@@ -2730,6 +2772,14 @@ func validateExtension(ext extensionManifest) []string {
 		}
 		if contract.Access != "" && contract.Access != "read" && contract.Access != "write" && contract.Access != "conditional-write" {
 			issues = append(issues, fmt.Sprintf("%s: command_contracts[%d] unsupported access", ext.Path, i))
+		}
+		if contract.Access == "conditional-write" && len(contract.WriteFlags) == 0 {
+			issues = append(issues, fmt.Sprintf("%s: command_contracts[%d] conditional-write missing write_flags", ext.Path, i))
+		}
+		for _, flag := range contract.WriteFlags {
+			if !strings.HasPrefix(strings.TrimSpace(flag), "--") {
+				issues = append(issues, fmt.Sprintf("%s: command_contracts[%d] write_flags must use --flag form", ext.Path, i))
+			}
 		}
 	}
 	return issues

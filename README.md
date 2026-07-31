@@ -103,6 +103,9 @@ is exposed:
 
 Only `vigil help` uses compact markers. Manuals, command catalogs, guard
 summaries, extension contracts, and JSON output use canonical values.
+Extension commands with `conditional-write` access must declare `write_flags`;
+without those flags, Vigil treats the base invocation as a preview and does not
+require mutation authority.
 
 Examples:
 
@@ -129,6 +132,10 @@ vigil --allow-mutation config:migrate --write
 # Always-write commands with real read-only overrides expose those flags.
 vigil support:bundle --dry-run
 vigil --allow-mutation support:bundle
+
+# Extension contracts use write_flags to distinguish preview from mutation.
+vigil github:init-ci
+vigil --allow-mutation github:init-ci --write
 ```
 
 Git hooks:
@@ -215,7 +222,18 @@ vigil extensions:doctor --json
 
 Command contracts must use canonical access values: `read`, `write`, or
 `conditional-write`. Shorthand such as `r/w` is display-only help text and is
-rejected in manifests.
+rejected in manifests. Conditional-write contracts must also declare
+`write_flags`, for example:
+
+```json
+{
+  "command": "github:init-ci",
+  "access": "conditional-write",
+  "write_flags": ["--write"],
+  "usage": "vigil github:init-ci [--write] [--json]",
+  "description": "Generate a GitHub Actions workflow from Vigil gates."
+}
+```
 
 Public extensions included in this repository:
 

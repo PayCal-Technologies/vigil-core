@@ -16,7 +16,7 @@
   "command_contracts": [
     {
       "command": "readme:generate",
-      "access": "conditional-write",
+      "access": "write",
       "usage": "vigil readme:generate [--dry-run] [--path README.md]",
       "description": "Generate Scribe managed README block.",
       "examples": [
