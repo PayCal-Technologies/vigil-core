@@ -16,7 +16,7 @@ jobs:
       - name: Install Vigil
         run: |
           mkdir -p bin
-          GOBIN="$PWD/bin" go install github.com/PayCal-Technologies/vigil-core/cmd/vigil@7ae14422483359eb6a9d0c25cb827e7de392012d
+          GOBIN="$PWD/bin" go install github.com/PayCal-Technologies/vigil-core/cmd/vigil@${{ github.sha }}
           echo "$PWD/bin" >> "$GITHUB_PATH"
       - name: Verify Vigil
         run: vigil verify --json

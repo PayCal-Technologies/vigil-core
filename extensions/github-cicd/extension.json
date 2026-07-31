@@ -15,7 +15,7 @@
   "command_contracts": [
     {
       "command": "github:init-ci",
-      "access": "r/w",
+      "access": "conditional-write",
       "usage": "vigil github:init-ci [--write] [--json]",
       "description": "Generate a GitHub Actions workflow from Vigil gates.",
       "examples": [

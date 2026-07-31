@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"time"
@@ -20,8 +21,8 @@ const (
 	version             = "0.1.0"
 	configSchemaVersion = "1"
 	defaultConfigName   = "vigil.config.json"
-	vigilCoreInstallRef = "7ae14422483359eb6a9d0c25cb827e7de392012d"
 	vigilCoreGoVersion  = "1.26.0"
+	vigilCoreModulePath = "github.com/PayCal-Technologies/vigil-core/cmd/vigil"
 )
 
 var promptReader = bufio.NewReader(os.Stdin)
@@ -362,7 +363,7 @@ func requiresMutationAuthority(command string, args []string) bool {
 
 func extensionCommandRequiresMutation(command string) bool {
 	access := extensionCommandAccess(command)
-	return access == "r/w" || access == "w" || access == "write" || access == "conditional-write"
+	return access == "write" || access == "conditional-write"
 }
 
 func extensionCommandAccess(command string) string {
@@ -1149,7 +1150,7 @@ func extensionCommandDescription(command, fallback string) string {
 func helpAccessMarker(command string) string {
 	switch command {
 	case "config:init", "config:repair", "hooks:install", "hooks:pre-commit", "hooks:pre-push", "readme:generate", "support:bundle", "workflow:local":
-		return "r/w"
+		return "conditional-write"
 	default:
 		return "r"
 	}
@@ -1748,7 +1749,7 @@ func githubWorkflow(cfg config) string {
 	b.WriteString("jobs:\n  vigil:\n    runs-on: ubuntu-latest\n    steps:\n")
 	b.WriteString("      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4\n")
 	b.WriteString("      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5\n        with:\n          go-version: '" + goVersionForWorkflow() + "'\n")
-	b.WriteString("      - name: Install Vigil\n        run: |\n          mkdir -p bin\n          GOBIN=\"$PWD/bin\" go install github.com/PayCal-Technologies/vigil-core/cmd/vigil@" + vigilCoreInstallRef + "\n          echo \"$PWD/bin\" >> \"$GITHUB_PATH\"\n")
+	b.WriteString("      - name: Install Vigil\n        run: |\n          mkdir -p bin\n          GOBIN=\"$PWD/bin\" go install " + vigilCoreModulePath + "@" + vigilCoreInstallRef() + "\n          echo \"$PWD/bin\" >> \"$GITHUB_PATH\"\n")
 	b.WriteString("      - name: Verify Vigil\n        run: vigil verify --json\n")
 	b.WriteString("      - name: Run Vigil Gates\n        run: vigil workflow:local --json\n")
 	return b.String()
@@ -1756,6 +1757,49 @@ func githubWorkflow(cfg config) string {
 
 func goVersionForWorkflow() string {
 	return vigilCoreGoVersion
+}
+
+func vigilCoreInstallRef() string {
+	if info, ok := debug.ReadBuildInfo(); ok {
+		if info.Main.Version != "" && info.Main.Version != "(devel)" {
+			return info.Main.Version
+		}
+		for _, setting := range info.Settings {
+			if setting.Key == "vcs.revision" && len(setting.Value) == 40 {
+				return setting.Value
+			}
+		}
+	}
+	if root := vigilCoreSourceRoot(); root != "" {
+		if ref := gitHeadRef(root); ref != "" {
+			return ref
+		}
+	}
+	return "main"
+}
+
+func vigilCoreSourceRoot() string {
+	if root := findFileUpward(mustGetwd(), "go.mod"); root != "" {
+		data, err := os.ReadFile(root)
+		if err == nil && strings.Contains(string(data), "module github.com/PayCal-Technologies/vigil-core") {
+			return filepath.Dir(root)
+		}
+	}
+	return ""
+}
+
+func gitHeadRef(repoRoot string) string {
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	cmd.Dir = repoRoot
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	ref := strings.TrimSpace(string(out))
+	if len(ref) != 40 {
+		return ""
+	}
+	return ref
 }
 
 func yamlScalar(value string) string {
@@ -2661,7 +2705,7 @@ func validateExtension(ext extensionManifest) []string {
 		if !commands[contract.Command] {
 			issues = append(issues, fmt.Sprintf("%s: command_contracts[%d] command is not listed in commands", ext.Path, i))
 		}
-		if contract.Access != "" && contract.Access != "r" && contract.Access != "r/w" && contract.Access != "w" {
+		if contract.Access != "" && contract.Access != "read" && contract.Access != "write" && contract.Access != "conditional-write" {
 			issues = append(issues, fmt.Sprintf("%s: command_contracts[%d] unsupported access", ext.Path, i))
 		}
 	}

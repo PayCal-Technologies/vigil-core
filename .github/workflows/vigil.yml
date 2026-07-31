@@ -13,10 +13,10 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.26.0'
-      - name: Build Vigil
+      - name: Install Vigil
         run: |
           mkdir -p bin
-          go build -o bin/vigil ./cmd/vigil
+          GOBIN="$PWD/bin" go install github.com/PayCal-Technologies/vigil-core/cmd/vigil@${{ github.sha }}
           echo "$PWD/bin" >> "$GITHUB_PATH"
       - name: Verify Vigil
         run: vigil verify --json

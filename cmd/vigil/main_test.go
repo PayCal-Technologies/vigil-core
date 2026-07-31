@@ -65,7 +65,7 @@ func TestManualForExtensionCommandUsesContract(t *testing.T) {
 	if manual.Usage != "vigil github:init-ci [--write] [--json]" {
 		t.Fatalf("unexpected usage: %s", manual.Usage)
 	}
-	if manual.Access != "r/w" {
+	if manual.Access != "conditional-write" {
 		t.Fatalf("unexpected access: %s", manual.Access)
 	}
 }
@@ -84,12 +84,26 @@ func TestGithubWorkflowRunsPolicyEngine(t *testing.T) {
 	for _, want := range []string{
 		"actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
 		"actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff",
-		"go install github.com/PayCal-Technologies/vigil-core/cmd/vigil@7ae14422483359eb6a9d0c25cb827e7de392012d",
+		"go install github.com/PayCal-Technologies/vigil-core/cmd/vigil@",
 		"go-version: '1.26.0'",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("workflow missing %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestGithubWorkflowInstallRefUsesCurrentSourceCheckout(t *testing.T) {
+	want := gitHeadRef(filepath.Clean(filepath.Join(mustGetwd(), "..", "..")))
+	if want == "" {
+		t.Skip("source checkout has no git HEAD")
+	}
+	got := vigilCoreInstallRef()
+	if got != want {
+		t.Fatalf("vigilCoreInstallRef = %q, want current source %s", got, want)
+	}
+	if got == "7ae14422483359eb6a9d0c25cb827e7de392012d" {
+		t.Fatal("vigilCoreInstallRef still pins stale ref")
 	}
 }
 
