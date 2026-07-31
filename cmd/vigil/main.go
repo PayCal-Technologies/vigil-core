@@ -18,11 +18,12 @@ import (
 )
 
 const (
-	version             = "0.1.0"
-	configSchemaVersion = "1"
-	defaultConfigName   = "vigil.config.json"
-	vigilCoreGoVersion  = "1.26.0"
-	vigilCoreModulePath = "github.com/PayCal-Technologies/vigil-core/cmd/vigil"
+	version                = "0.1.0"
+	configSchemaVersion    = "2"
+	extensionSchemaVersion = "1"
+	defaultConfigName      = "vigil.config.json"
+	vigilCoreGoVersion     = "1.26.0"
+	vigilCoreModulePath    = "github.com/PayCal-Technologies/vigil-core/cmd/vigil"
 )
 
 var promptReader = bufio.NewReader(os.Stdin)
@@ -42,6 +43,11 @@ type coordinationConfig struct {
 	Mode                  string   `json:"mode"`
 	AuthoritativeSurfaces []string `json:"authoritative_surfaces"`
 	MutationRequires      []string `json:"mutation_requires"`
+}
+
+type legacyAuthorityConfig struct {
+	LocalFirst       bool     `json:"local_first"`
+	MutationRequires []string `json:"mutation_requires"`
 }
 
 type gateConfig struct {
@@ -709,12 +715,11 @@ func configMigrate(configPath string, args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	var cfg config
-	if err := json.Unmarshal(data, &cfg); err != nil {
+	cfg, before, err := migrateConfigData(data)
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "invalid JSON: "+err.Error())
 		return 1
 	}
-	before := cfg.SchemaVersion
 	cfg = applyConfigDefaults(cfg, cfg.Profile)
 	cfg.SchemaVersion = configSchemaVersion
 	next, err := json.MarshalIndent(cfg, "", "  ")
@@ -740,6 +745,32 @@ func configMigrate(configPath string, args []string) int {
 	}
 	fmt.Printf("%s config schema=%s\n", statusLabel("ok"), configSchemaVersion)
 	return 0
+}
+
+func migrateConfigData(data []byte) (config, string, error) {
+	var raw struct {
+		config
+		LegacyAuthority *legacyAuthorityConfig `json:"authority,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return config{}, "", err
+	}
+	cfg := raw.config
+	before := strings.TrimSpace(cfg.SchemaVersion)
+	if before == "" {
+		before = "unknown"
+	}
+	if raw.LegacyAuthority != nil && len(cfg.Coordination.MutationRequires) == 0 {
+		cfg.Coordination.MutationRequires = append([]string{}, raw.LegacyAuthority.MutationRequires...)
+	}
+	if raw.LegacyAuthority != nil && strings.TrimSpace(cfg.Coordination.Mode) == "" {
+		if raw.LegacyAuthority.LocalFirst {
+			cfg.Coordination.Mode = "github-adjacent-helper"
+		} else {
+			cfg.Coordination.Mode = "custom"
+		}
+	}
+	return cfg, before, nil
 }
 
 func explain(args []string) int {
@@ -1006,8 +1037,14 @@ func applyConfigDefaults(cfg config, profile string) config {
 	if strings.TrimSpace(cfg.Project) == "" {
 		cfg.Project = defaults.Project
 	}
+	if strings.TrimSpace(cfg.Coordination.Mode) == "" {
+		cfg.Coordination.Mode = defaults.Coordination.Mode
+	}
+	if len(cfg.Coordination.AuthoritativeSurfaces) == 0 {
+		cfg.Coordination.AuthoritativeSurfaces = append([]string{}, defaults.Coordination.AuthoritativeSurfaces...)
+	}
 	if len(cfg.Coordination.MutationRequires) == 0 {
-		cfg.Coordination = defaults.Coordination
+		cfg.Coordination.MutationRequires = append([]string{}, defaults.Coordination.MutationRequires...)
 	}
 	if len(cfg.Gates) == 0 {
 		cfg.Gates = defaults.Gates
@@ -2613,7 +2650,7 @@ func matchFileGlob(pattern, rel string) (bool, error) {
 }
 
 func loadExtensions(root string) extensionReport {
-	report := extensionReport{SchemaVersion: configSchemaVersion, Status: "ok", Root: root}
+	report := extensionReport{SchemaVersion: extensionSchemaVersion, Status: "ok", Root: root}
 	settings := extensionSettings()
 	if !settings.Enabled {
 		return report
@@ -2759,7 +2796,7 @@ func validateExtension(ext extensionManifest) []string {
 			issues = append(issues, ext.Path+": missing "+field)
 		}
 	}
-	if ext.SchemaVersion != "" && ext.SchemaVersion != configSchemaVersion {
+	if ext.SchemaVersion != "" && ext.SchemaVersion != extensionSchemaVersion {
 		issues = append(issues, ext.Path+": unsupported schema_version "+ext.SchemaVersion)
 	}
 	if ext.ID != "" && !regexp.MustCompile(`^[a-z][a-z0-9-]*$`).MatchString(ext.ID) {
@@ -2854,6 +2891,12 @@ func validateConfigIssues(cfg config) []configIssue {
 	}
 	if strings.TrimSpace(cfg.Project) == "" {
 		add("project", "project.required", "project is required")
+	}
+	if strings.TrimSpace(cfg.Coordination.Mode) == "" {
+		add("coordination.mode", "coordination.mode.required", "coordination.mode is required")
+	}
+	if len(cfg.Coordination.AuthoritativeSurfaces) == 0 {
+		add("coordination.authoritative_surfaces", "coordination.authoritative_surfaces.required", "coordination.authoritative_surfaces must name at least one authoritative surface")
 	}
 	if len(cfg.Coordination.MutationRequires) == 0 {
 		add("coordination.mutation_requires", "coordination.mutation_requires.required", "coordination.mutation_requires must name at least one confirmation requirement")

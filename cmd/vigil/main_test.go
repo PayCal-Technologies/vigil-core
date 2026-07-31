@@ -563,7 +563,7 @@ func TestPublicAssumptionScanIsClean(t *testing.T) {
 }
 
 func TestConfigTemplateValidates(t *testing.T) {
-	for _, profile := range []string{"generic", "go-tool", "static-site"} {
+	for _, profile := range []string{"generic", "go-tool", "static-site", "js-app", "php-app", "native-app", "mixed", "custom"} {
 		if err := validateStruct(templateConfig(profile)); err != nil {
 			t.Fatalf("templateConfig(%s) failed validation: %v", profile, err)
 		}
@@ -582,7 +582,7 @@ func TestValidateConfigIssuesExplainsMissingFields(t *testing.T) {
 			t.Fatalf("issue missing code or message: %#v", issue)
 		}
 	}
-	for _, want := range []string{"schema_version", "profile", "project", "coordination.mutation_requires", "gates"} {
+	for _, want := range []string{"schema_version", "profile", "project", "coordination.mode", "coordination.authoritative_surfaces", "coordination.mutation_requires", "gates"} {
 		if !fields[want] {
 			t.Fatalf("expected issue for %s, got %#v", want, issues)
 		}
@@ -603,6 +603,74 @@ func TestApplyConfigDefaultsDropsInvalidPublicAssumptionPatterns(t *testing.T) {
 	}
 	if len(cfg.PublicAssumptionPatterns) != 1 || cfg.PublicAssumptionPatterns[0] != "(?i)sample-pattern" {
 		t.Fatalf("unexpected repaired patterns: %#v", cfg.PublicAssumptionPatterns)
+	}
+}
+
+func TestConfigMigratePreservesLegacyAuthorityMutationRequirements(t *testing.T) {
+	temp := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+	if err := os.Chdir(temp); err != nil {
+		t.Fatal(err)
+	}
+	legacy := `{
+  "schema_version": "1",
+  "profile": "generic",
+  "project": "legacy",
+  "authority": {
+    "local_first": true,
+    "mutation_requires": [
+      "explicit-confirmation",
+      "clean-config",
+      "clean-tree"
+    ]
+  },
+  "gates": [
+    {
+      "name": "status",
+      "command": "git status --short",
+      "read_only": true
+    }
+  ],
+  "extensions": {
+    "enabled": true,
+    "manifest_root": "extensions",
+    "allowed_kinds": ["custom"],
+    "require_private": false
+  }
+}`
+	if err := os.WriteFile(defaultConfigName, []byte(legacy+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := configMigrate("", []string{"--write", "--json"}); code != 0 {
+		t.Fatalf("configMigrate exit = %d", code)
+	}
+	data, err := os.ReadFile(defaultConfigName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var migrated config
+	if err := json.Unmarshal(data, &migrated); err != nil {
+		t.Fatal(err)
+	}
+	if migrated.SchemaVersion != configSchemaVersion {
+		t.Fatalf("schema_version = %q, want %q", migrated.SchemaVersion, configSchemaVersion)
+	}
+	if strings.Contains(string(data), `"authority"`) {
+		t.Fatalf("legacy authority block was not removed:\n%s", data)
+	}
+	want := []string{"explicit-confirmation", "clean-config", "clean-tree"}
+	if strings.Join(migrated.Coordination.MutationRequires, ",") != strings.Join(want, ",") {
+		t.Fatalf("mutation requirements = %#v, want %#v", migrated.Coordination.MutationRequires, want)
+	}
+	if migrated.Coordination.Mode != "github-adjacent-helper" {
+		t.Fatalf("coordination.mode = %q", migrated.Coordination.Mode)
+	}
+	if len(migrated.Coordination.AuthoritativeSurfaces) == 0 {
+		t.Fatal("coordination.authoritative_surfaces was not populated")
 	}
 }
 

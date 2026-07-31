@@ -178,7 +178,7 @@ vigil config:repair
 vigil config:repair --yes
 ```
 
-The current schema version is `1`.
+The current schema version is `2`. `config:migrate` upgrades legacy v1 `authority.mutation_requires` into v2 `coordination.mutation_requires` without dropping custom requirements such as `clean-tree`.
 
 `config:validate --json` returns machine-readable `structured_issues` and a
 repair hint. `config:repair` uses classic command-line stdin prompts and shows
@@ -199,6 +199,8 @@ Extensions are described by `extensions/<id>/extension.json`. The public core
 validates extension manifests and reports which extensions are available.
 Invalid manifests fail closed: their validation issues are reported by
 `extensions:doctor`, but their commands are excluded from the loaded command set.
+Extension manifests currently use schema version `1`; the config schema version
+is independent.
 
 ```json
 {
