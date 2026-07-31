@@ -1,0 +1,54 @@
+{
+  "schema_version": "1",
+  "profile": "go-tool",
+  "project": "vigil-core",
+  "authority": {
+    "local_first": true,
+    "mutation_requires": [
+      "explicit-confirmation",
+      "clean-config"
+    ]
+  },
+  "gates": [
+    {
+      "name": "go test",
+      "command": "go test ./...",
+      "read_only": true,
+      "tags": [
+        "test"
+      ]
+    },
+    {
+      "name": "command catalog",
+      "command": "./bin/vigil checks:command-catalog --json",
+      "read_only": true,
+      "tags": [
+        "diagnostic"
+      ]
+    },
+    {
+      "name": "extension manifests",
+      "command": "./bin/vigil extensions:doctor --json",
+      "read_only": true,
+      "tags": [
+        "extension"
+      ]
+    },
+    {
+      "name": "public assumptions",
+      "command": "./bin/vigil checks:public-assumptions --json",
+      "read_only": true,
+      "tags": [
+        "public"
+      ]
+    }
+  ],
+  "extensions": {
+    "enabled": true,
+    "manifest_root": "extensions",
+    "allowed_kinds": [
+      "custom"
+    ],
+    "require_private": false
+  }
+}

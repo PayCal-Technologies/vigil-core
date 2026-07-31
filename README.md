@@ -7,6 +7,11 @@ This public repository contains the source-available core:
 
 - versioned JSON configuration;
 - guided config creation and validation;
+- local `doctor`, `status`, `plan`, `verify`, and support-bundle diagnostics;
+- config-driven local workflow gates;
+- git hook shims for pre-commit and pre-push;
+- generic workspace hygiene, staged-secret, dependency inventory, and command
+  catalog checks;
 - extension manifest discovery and diagnostics;
 - a small CLI surface that can be embedded into deployment-specific workflows.
 
@@ -30,7 +35,54 @@ go build -o bin/vigil ./cmd/vigil
 ```bash
 vigil config:init --write
 vigil config:validate
+vigil doctor
+vigil workflow:local --dry-run
+vigil workflow:local
 vigil extensions:doctor --json
+```
+
+## CI/CD Use
+
+Vigil Core runs local CI/CD from `vigil.config.json`. Each gate is a named shell
+command with metadata that tells humans and automation whether it is read-only.
+
+```json
+{
+  "name": "go test",
+  "command": "go test ./...",
+  "read_only": true,
+  "tags": ["test"]
+}
+```
+
+Common commands:
+
+```bash
+vigil status --json
+vigil plan
+vigil workflow:local --dry-run
+vigil workflow:local --json
+vigil verify --json
+vigil support:bundle --dry-run
+```
+
+Git hooks:
+
+```bash
+vigil hooks:install
+```
+
+This installs `pre-commit` and `pre-push` hook shims that run the configured
+Vigil workflow.
+
+Built-in public checks:
+
+```bash
+vigil checks:staged-sensitive
+vigil checks:workspace-hygiene
+vigil checks:command-catalog --json
+vigil checks:public-assumptions --json
+vigil deps:inventory --json
 ```
 
 ## Config
