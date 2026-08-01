@@ -37,7 +37,8 @@ successfully.
 Ready read-only gates may execute concurrently only when they share an explicit
 `parallel_group`. Vigil fingerprints once around the whole batch. If the
 workspace changes, every gate in that batch receives `mutation_detected`
-because attribution to one process would be unsafe.
+because attribution to one process would be unsafe. The result diagnostic names
+the parallel group and states that individual attribution is unavailable.
 
 Fingerprinting is fail-closed at 100,000 untracked files or 2 GiB of total
 untracked content. Non-regular paths returned by Git, including device nodes,

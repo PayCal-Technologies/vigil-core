@@ -1403,6 +1403,10 @@ func TestParallelReadOnlyMutationMarksEntireBatchAsViolated(t *testing.T) {
 		if result.State != string(runner.StateMutationDetected) {
 			t.Fatalf("result = %#v", result)
 		}
+		if !strings.Contains(result.Output, `parallel group "analysis"`) ||
+			!strings.Contains(result.Output, "individual attribution is unavailable") {
+			t.Fatalf("mutation diagnostic = %q", result.Output)
+		}
 	}
 }
 

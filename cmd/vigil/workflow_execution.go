@@ -225,7 +225,15 @@ func runGateBatch(
 		results[index].State = string(runner.StateMutationDetected)
 		results[index].ExitCode = vigilcli.ExitMutationViolation
 		results[index].MutationDiff = mutationDiff
-		results[index].Output = appendResultOutput(results[index].Output, "read-only check changed git workspace fingerprint")
+		message := "read-only check changed git workspace fingerprint"
+		if len(batch) > 1 {
+			group := strings.TrimSpace(document.Gates[batch[index]].ParallelGroup)
+			if group == "" {
+				group = "unnamed"
+			}
+			message = fmt.Sprintf("a command in parallel group %q changed the git workspace fingerprint; individual attribution is unavailable", group)
+		}
+		results[index].Output = appendResultOutput(results[index].Output, message)
 	}
 	return results, nil
 }

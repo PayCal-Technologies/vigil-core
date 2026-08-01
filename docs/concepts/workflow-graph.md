@@ -88,7 +88,9 @@ read-only gate that changes Git-visible files still fails mutation detection.
 Vigil fingerprints the Git-visible workspace once before and once after an
 explicit parallel batch. If the fingerprint changes, every gate in that batch
 is marked `mutation_detected` because Vigil cannot safely attribute the change
-to one process. This is fail-closed and preserves exit code `6`.
+to one process. The diagnostic reports that a command in the named parallel
+group changed the fingerprint and that individual attribution is unavailable.
+This is fail-closed and preserves exit code `6`.
 
 `read_only` remains repository verification, not an operating-system sandbox.
 Ignored files, caches, network state, and external services are outside the
