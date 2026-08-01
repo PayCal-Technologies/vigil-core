@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vigil.dev/schemas/vigil-run-artifact-manifest-v1.schema.json",
+  "title": "Vigil private run artifact manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "created_at",
+    "artifact_dir",
+    "plan_path",
+    "result_path",
+    "gates_dir",
+    "max_gate_log_bytes",
+    "max_run_log_bytes"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "artifact_dir": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "plan_path": {
+      "const": "plan.json"
+    },
+    "result_path": {
+      "const": "result.json"
+    },
+    "gates_dir": {
+      "const": "gates"
+    },
+    "max_gate_log_bytes": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "max_run_log_bytes": {
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}

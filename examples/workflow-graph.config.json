@@ -1,0 +1,104 @@
+{
+  "schema_version": "3",
+  "profile": "custom",
+  "project": "workflow-graph-example",
+  "coordination": {
+    "mode": "policy-aware-preflight",
+    "authoritative_surfaces": [
+      "reviewed repository configuration"
+    ],
+    "mutation_requires": [
+      "explicit-confirmation"
+    ]
+  },
+  "gates": [
+    {
+      "name": "generated-code check",
+      "command": "git",
+      "args": [
+        "diff",
+        "--exit-code",
+        "--"
+      ],
+      "read_only": true,
+      "tags": [
+        "pre-push"
+      ]
+    },
+    {
+      "name": "unit tests",
+      "command": "go",
+      "args": [
+        "test",
+        "./..."
+      ],
+      "read_only": true,
+      "depends_on": [
+        "generated-code check"
+      ],
+      "parallel_group": "tests",
+      "tags": [
+        "pre-push"
+      ],
+      "timeout": "5m"
+    },
+    {
+      "name": "integration tests",
+      "command": "go",
+      "args": [
+        "test",
+        "./integration/..."
+      ],
+      "read_only": true,
+      "depends_on": [
+        "generated-code check"
+      ],
+      "parallel_group": "tests",
+      "continue_on_error": true,
+      "required": false,
+      "retry": {
+        "max_attempts": 2,
+        "delay": "1s",
+        "on": [
+          "failed",
+          "timed_out"
+        ]
+      },
+      "cwd": "services/api",
+      "environment": {
+        "CI": "true"
+      },
+      "artifacts": [
+        {
+          "path": "reports/junit.xml",
+          "kind": "junit",
+          "media_type": "application/xml",
+          "required": false
+        }
+      ],
+      "tags": [
+        "network",
+        "pre-push"
+      ],
+      "timeout": "10m"
+    }
+  ],
+  "extensions": {
+    "enabled": false,
+    "manifest_root": "extensions",
+    "allowed_kinds": [
+      "custom"
+    ],
+    "require_private": false
+  },
+  "plugins": {
+    "mode": "disabled",
+    "local": "allow",
+    "require_signed": false,
+    "min_signature_threshold": 0,
+    "allowed_ids": [],
+    "denied_ids": [],
+    "allowed_publisher_key_ids": [],
+    "denied_capabilities": []
+  }
+}
