@@ -1,6 +1,6 @@
 # File Iterator Example Extension
 
-This is the canonical golden-master extension for Vigil Core.
+This is the canonical golden-master extension for Vigil.
 
 It demonstrates how an extension contributes command metadata without needing a
 domain-specific integration. A real implementation of `files:iterate` would:

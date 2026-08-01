@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -176,7 +178,7 @@ func TestGithubWorkflowRunsPolicyEngine(t *testing.T) {
 		"actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
 		"actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16",
 		"cache: false",
-		"go install github.com/PayCal-Technologies/vigil-core/cmd/vigil@",
+		"go install github.com/PayCal-Technologies/vigil-public/cmd/vigil@",
 		"go-version: '1.26.0'",
 	} {
 		if !strings.Contains(out, want) {
@@ -958,6 +960,91 @@ func TestUniqueStringsPreservesOrder(t *testing.T) {
 			t.Fatalf("uniqueStrings[%d] = %s, want %s", i, got[i], want[i])
 		}
 	}
+}
+
+func TestInteractiveSetupWizardDryRunUsesInjectedInput(t *testing.T) {
+	temp := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+	if err := os.Chdir(temp); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("go.mod", []byte("module example.test/app\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	oldReader := promptReader
+	promptReader = bufio.NewReader(strings.NewReader("\n\n\n\n\n\n\n\n"))
+	t.Cleanup(func() { promptReader = oldReader })
+	output := captureStdout(t, func() {
+		if code := runInteractiveSetupWizard("", "auto", false, false, true); code != 0 {
+			t.Fatalf("wizard dry-run exit = %d", code)
+		}
+	})
+	if !strings.Contains(output, "Vigil Setup Wizard") || !strings.Contains(output, "Review configuration") {
+		t.Fatalf("wizard output missing expected sections:\n%s", output)
+	}
+	if fileExists(defaultConfigName) {
+		t.Fatal("dry-run wizard wrote config")
+	}
+}
+
+func TestInitAliasWritesConfigWithMutationConfirmation(t *testing.T) {
+	temp := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+	if err := os.Chdir(temp); err != nil {
+		t.Fatal(err)
+	}
+	if code := run([]string{"--allow-mutation", "init", "--yes"}); code != 0 {
+		t.Fatalf("init alias exit = %d", code)
+	}
+	if _, _, err := loadConfig(""); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestHelpCategoriesPutSetupLast(t *testing.T) {
+	output := captureStdout(t, printHelp)
+	setupIndex := strings.LastIndex(output, "\nsetup\n")
+	if setupIndex < 0 {
+		t.Fatalf("setup category missing:\n%s", output)
+	}
+	if strings.Contains(output[setupIndex+1:], "\ncore\n") {
+		t.Fatalf("setup was not the final category:\n%s", output)
+	}
+}
+
+func TestManpageIncludesSetupAndLicense(t *testing.T) {
+	page := generateManpage()
+	for _, want := range []string{".TH VIGIL", "setup:wizard", "0BSD"} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("manpage missing %q:\n%s", want, page)
+		}
+	}
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stdout
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = writer
+	fn()
+	_ = writer.Close()
+	os.Stdout = old
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
 }
 
 func containsString(values []string, want string) bool {

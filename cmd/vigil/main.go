@@ -24,7 +24,7 @@ const (
 	extensionSchemaVersion = "1"
 	defaultConfigName      = "vigil.config.json"
 	vigilCoreGoVersion     = "1.26.0"
-	vigilCoreModulePath    = "github.com/PayCal-Technologies/vigil-core/cmd/vigil"
+	vigilCoreModulePath    = "github.com/PayCal-Technologies/vigil-public/cmd/vigil"
 )
 
 var promptReader = bufio.NewReader(os.Stdin)
@@ -137,6 +137,15 @@ func run(args []string) int {
 	rest := global.Args()
 	if len(rest) == 0 {
 		printHelp()
+		if isInteractiveTerminal() {
+			runSetup, control := wizardBool("Run setup wizard now?", false)
+			if control == "quit" {
+				return 1
+			}
+			if runSetup {
+				return setupWizard(*configPath, []string{})
+			}
+		}
 		return 0
 	}
 	command := rest[0]
@@ -158,7 +167,7 @@ func run(args []string) int {
 	case "list", "commands":
 		return listCommands(commandArgs)
 	case "version":
-		fmt.Printf("vigil-core %s config_schema=%s\n", version, configSchemaVersion)
+		fmt.Printf("vigil-public %s config_schema=%s\n", version, configSchemaVersion)
 		return 0
 	case "doctor":
 		return doctor(*configPath, commandArgs)
@@ -204,6 +213,10 @@ func run(args []string) int {
 		return supportBundle(*configPath, commandArgs)
 	case "completion":
 		return completion(commandArgs)
+	case "manpage", "manpage:generate":
+		return manpageGenerate(commandArgs)
+	case "manpage:install":
+		return manpageInstall(commandArgs)
 	case "init:ci":
 		return initCI(*configPath, commandArgs)
 	case "github:init-ci":
@@ -226,7 +239,10 @@ func run(args []string) int {
 		return configReport(*configPath, commandArgs)
 	case "config:template":
 		return configTemplate(commandArgs)
-	case "setup", "setup:wizard":
+	case "init", "setup", "setup:wizard":
+		if confirmation.AllowMutation && !hasFlag(commandArgs, "dry-run") && !hasFlag(commandArgs, "json") && !hasFlag(commandArgs, "write") {
+			commandArgs = append(commandArgs, "--write")
+		}
 		return setupWizard(*configPath, commandArgs)
 	case "guards:summary":
 		return guardsSummary(commandArgs)
@@ -293,20 +309,31 @@ func printHelp() {
 			width = len(command.Command)
 		}
 	}
-	fmt.Println("Vigil Core")
+	fmt.Println("Vigil")
 	fmt.Println()
 	fmt.Println("Usage:")
 	fmt.Println("  vigil [--config PATH] [--allow-mutation|--auto] <command> [args]")
 	fmt.Println()
-	fmt.Println("core")
-	for _, command := range commands {
-		fmt.Printf("  %-3s %-*s   %s\n", compactAccessMarker(command.Access), width, command.Command, compactHelpDescription(command.Description))
+	order := []string{"Core", "Checks", "Config", "Extensions", "Automation", "Packaging", "Setup"}
+	for _, category := range order {
+		printed := false
+		for _, command := range commands {
+			if commandCategory(command) != category {
+				continue
+			}
+			if !printed {
+				fmt.Println(strings.ToLower(category))
+				printed = true
+			}
+			fmt.Printf("  %-3s %-*s   %s\n", compactAccessMarker(command.Access), width, command.Command, compactHelpDescription(command.Description))
+		}
 	}
 }
 
 type commandInfo struct {
 	Command     string   `json:"command"`
 	Source      string   `json:"source"`
+	Category    string   `json:"category,omitempty"`
 	Description string   `json:"description"`
 	Access      string   `json:"access,omitempty"`
 	WriteFlags  []string `json:"write_flags,omitempty"`
@@ -371,8 +398,10 @@ func requiresMutationConfirmation(command string, args []string) bool {
 		return hasFlag(args, "write") || hasFlag(args, "force")
 	case "config:migrate":
 		return hasFlag(args, "write")
-	case "setup", "setup:wizard":
+	case "init", "setup", "setup:wizard":
 		return hasFlag(args, "write")
+	case "manpage:install":
+		return true
 	case "config:repair", "hooks:install":
 		return true
 	case "init:ci", "github:init-ci":
@@ -721,14 +750,30 @@ func setupWizard(configPath string, args []string) int {
 	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	profile := fs.String("profile", "auto", "profile or auto")
+	dryRun := fs.Bool("dry-run", false, "interactive preview without writing")
 	write := fs.Bool("write", false, "write or repair config")
 	force := fs.Bool("force", false, "overwrite existing config when writing")
+	yes := fs.Bool("yes", false, "accept detected defaults without prompting")
+	gatesCSV := fs.String("gates", "", "comma-separated gate names for non-interactive setup")
+	installHooks := fs.Bool("install-hooks", false, "install Git hooks in non-interactive setup")
+	noDoctor := fs.Bool("no-doctor", false, "skip doctor in non-interactive setup")
+	workflowMode := fs.String("workflow", "dry-run", "non-interactive workflow mode: dry-run, execute, or skip")
 	jsonOut := fs.Bool("json", false, "json output")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	if *yes && !*jsonOut {
+		return runNonInteractiveSetupWizard(configPath, *profile, *write && !*dryRun, *force, *dryRun, *gatesCSV, *installHooks, !*noDoctor, *workflowMode)
+	}
+	if !*jsonOut && !*yes {
+		if !isInteractiveTerminal() {
+			fmt.Fprintln(os.Stderr, "setup wizard requires an interactive terminal; rerun with --yes for defaults or --json for deterministic output")
+			return 2
+		}
+		return runInteractiveSetupWizard(configPath, *profile, *write && !*dryRun, *force, *dryRun)
+	}
 	plan := buildSetupPlan(configPath, *profile)
-	if *write {
+	if *write && !*dryRun {
 		if plan["overall"] == "blocked" {
 			message := "setup write blocked by current repository state"
 			plan["mode"] = "write"
@@ -798,8 +843,427 @@ func setupWizard(configPath string, args []string) int {
 	if *jsonOut {
 		return printStatusJSON(plan, boolExit(plan["overall"] == "blocked"))
 	}
-	renderSetupPlan(plan)
+	if *yes {
+		renderSetupReview(setupWizardAnswers{
+			Profile:       plan["profile"].(map[string]any)["selected"].(string),
+			ConfigPath:    plan["config_path"].(string),
+			CreateConfig:  plan["config_state"] != "valid-v2",
+			RunDoctor:     true,
+			WorkflowMode:  "dry-run",
+			SelectedGates: templateConfig(plan["profile"].(map[string]any)["selected"].(string)).Gates,
+		}, *write && !*dryRun)
+	} else {
+		renderSetupPlan(plan)
+	}
 	return boolExit(plan["overall"] == "blocked")
+}
+
+type setupWizardAnswers struct {
+	Profile       string
+	ConfigPath    string
+	CreateConfig  bool
+	SelectedGates []gateConfig
+	InstallHooks  bool
+	InspectHooks  bool
+	RunDoctor     bool
+	WorkflowMode  string
+}
+
+func runInteractiveSetupWizard(configPath, requestedProfile string, write bool, force bool, dryRun bool) int {
+	detected := detectSetupProfile()
+	selectedProfile := firstNonEmpty(requestedProfile, "auto")
+	if selectedProfile == "auto" {
+		selectedProfile = fmt.Sprint(detected["primary"])
+	}
+	path := resolvedConfigPath(configPath)
+	answers := setupWizardAnswers{Profile: selectedProfile, ConfigPath: path, RunDoctor: true, WorkflowMode: "dry-run"}
+	fmt.Println("Vigil Setup Wizard")
+	fmt.Println()
+	fmt.Printf("Detected project profile: %s\n", profileDisplayName(selectedProfile))
+	useProfile, control := wizardBool("Use this profile?", true)
+	if control != "" {
+		return handleWizardControl(control)
+	}
+	if !useProfile {
+		profile, control := wizardSelect("Select profile", []string{"generic", "go-tool", "static-site", "js-app", "php-app", "native-app", "mixed", "custom"}, selectedProfile)
+		if control != "" {
+			return handleWizardControl(control)
+		}
+		answers.Profile = profile
+	}
+	defaults := templateConfig(answers.Profile)
+	answers.SelectedGates = append([]gateConfig{}, defaults.Gates...)
+	fmt.Println()
+	fmt.Println("Configuration file:")
+	fmt.Printf("  %s\n", path)
+	createDefault := !fileExists(path) || force
+	createConfig, control := wizardBool("Create or update this file?", createDefault)
+	if control != "" {
+		return handleWizardControl(control)
+	}
+	answers.CreateConfig = createConfig
+	fmt.Println()
+	fmt.Println("Select local workflow gates:")
+	selected := []gateConfig{}
+	for _, gate := range defaults.Gates {
+		include, control := wizardBool("  "+gate.Name+" ("+gate.Command+")?", true)
+		if control != "" {
+			return handleWizardControl(control)
+		}
+		if include {
+			selected = append(selected, gate)
+		}
+	}
+	answers.SelectedGates = selected
+	answers.InstallHooks, control = wizardBool("Install missing Git hooks?", false)
+	if control != "" {
+		return handleWizardControl(control)
+	}
+	answers.InspectHooks, control = wizardBool("Inspect existing hooks before installation?", true)
+	if control != "" {
+		return handleWizardControl(control)
+	}
+	answers.RunDoctor, control = wizardBool("Run readiness checks after setup?", true)
+	if control != "" {
+		return handleWizardControl(control)
+	}
+	workflow, control := wizardSelect("Run the local workflow after setup?", []string{"dry-run", "execute", "skip"}, "dry-run")
+	if control != "" {
+		return handleWizardControl(control)
+	}
+	answers.WorkflowMode = workflow
+	fmt.Println()
+	renderSetupReview(answers, write && !dryRun)
+	confirmed, control := wizardBool("Write configuration and complete setup?", true)
+	if control != "" {
+		return handleWizardControl(control)
+	}
+	if !confirmed {
+		fmt.Println("setup cancelled")
+		return 1
+	}
+	if dryRun || !write {
+		fmt.Println()
+		fmt.Println("No files were written.")
+		fmt.Println("To apply these selections, rerun:")
+		fmt.Println("  " + setupRestartCommand(answers))
+		return 0
+	}
+	if code := writeSetupConfig(answers, force); code != 0 {
+		return code
+	}
+	return finishSetupWizard(answers)
+}
+
+func runNonInteractiveSetupWizard(configPath, requestedProfile string, write bool, force bool, dryRun bool, gatesCSV string, installHooks bool, runDoctor bool, workflowMode string) int {
+	detected := detectSetupProfile()
+	profile := firstNonEmpty(requestedProfile, "auto")
+	if profile == "auto" {
+		profile = fmt.Sprint(detected["primary"])
+	}
+	cfg := templateConfig(profile)
+	gates := cfg.Gates
+	if strings.TrimSpace(gatesCSV) != "" {
+		gates = selectGatesByName(cfg.Gates, splitCSV(gatesCSV))
+	}
+	answers := setupWizardAnswers{
+		Profile:       profile,
+		ConfigPath:    resolvedConfigPath(configPath),
+		CreateConfig:  true,
+		SelectedGates: gates,
+		InstallHooks:  installHooks,
+		InspectHooks:  true,
+		RunDoctor:     runDoctor,
+		WorkflowMode:  workflowMode,
+	}
+	renderSetupReview(answers, write && !dryRun)
+	if dryRun || !write {
+		fmt.Println()
+		fmt.Println("No files were written.")
+		return 0
+	}
+	if code := writeSetupConfig(answers, force); code != 0 {
+		return code
+	}
+	return finishSetupWizard(answers)
+}
+
+func writeSetupConfig(answers setupWizardAnswers, force bool) int {
+	cfg := templateConfig(answers.Profile)
+	cfg.Gates = answers.SelectedGates
+	if !answers.CreateConfig {
+		return 0
+	}
+	data, err := marshalConfigDocument(map[string]json.RawMessage{}, cfg)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	if !force && fileExists(answers.ConfigPath) {
+		fmt.Fprintf(os.Stderr, "config already exists: %s\n", answers.ConfigPath)
+		return 1
+	}
+	if _, err := atomicWriteFile(answers.ConfigPath, data, fileExists(answers.ConfigPath)); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	if _, _, err := loadConfig(answers.ConfigPath); err != nil {
+		fmt.Fprintln(os.Stderr, "post-write validation failed: "+err.Error())
+		return 1
+	}
+	return 0
+}
+
+func finishSetupWizard(answers setupWizardAnswers) int {
+	hooksStatus := "unchanged"
+	if answers.InstallHooks {
+		if answers.InspectHooks {
+			inspectHooks()
+		}
+		if code := hooksInstall(nil); code != 0 {
+			hooksStatus = "failed"
+		} else {
+			hooksStatus = "installed"
+		}
+	}
+	doctorStatus := "skipped"
+	if answers.RunDoctor {
+		if code := doctor(answers.ConfigPath, nil); code == 0 {
+			doctorStatus = "passed"
+		} else {
+			doctorStatus = "failed"
+		}
+	}
+	workflowStatus := "skipped"
+	if answers.WorkflowMode == "dry-run" {
+		if code := workflowLocal(answers.ConfigPath, []string{"--dry-run"}, false); code == 0 {
+			workflowStatus = "dry-run passed"
+		} else {
+			workflowStatus = "dry-run failed"
+		}
+	} else if answers.WorkflowMode == "execute" {
+		if code := workflowLocal(answers.ConfigPath, nil, true); code == 0 {
+			workflowStatus = "passed"
+		} else {
+			workflowStatus = "failed"
+		}
+	}
+	fmt.Println()
+	fmt.Println("Vigil setup complete.")
+	fmt.Println()
+	fmt.Printf("  Profile:       %s\n", answers.Profile)
+	fmt.Printf("  Configuration: %s\n", answers.ConfigPath)
+	fmt.Printf("  Hooks:         %s\n", hooksStatus)
+	fmt.Printf("  Doctor:        %s\n", doctorStatus)
+	fmt.Printf("  Workflow:      %s\n", workflowStatus)
+	fmt.Println()
+	fmt.Println("Next: vigil workflow:local")
+	return 0
+}
+
+func setupRestartCommand(answers setupWizardAnswers) string {
+	parts := []string{"vigil", "--allow-mutation", "setup:wizard", "--write", "--yes", "--profile=" + shellQuote(answers.Profile)}
+	if len(answers.SelectedGates) > 0 {
+		parts = append(parts, "--gates="+shellQuote(gateNames(answers.SelectedGates)))
+	}
+	if answers.InstallHooks {
+		parts = append(parts, "--install-hooks")
+	}
+	if !answers.RunDoctor {
+		parts = append(parts, "--no-doctor")
+	}
+	if answers.WorkflowMode != "" {
+		parts = append(parts, "--workflow="+shellQuote(answers.WorkflowMode))
+	}
+	return strings.Join(parts, " ")
+}
+
+func renderSetupReview(answers setupWizardAnswers, write bool) {
+	fmt.Println("Review configuration:")
+	fmt.Println()
+	fmt.Printf("  Profile:            %s\n", answers.Profile)
+	fmt.Printf("  Config path:        %s\n", answers.ConfigPath)
+	fmt.Printf("  Gates:              %s\n", gateNames(answers.SelectedGates))
+	fmt.Printf("  Install hooks:      %s\n", yesNo(answers.InstallHooks))
+	fmt.Printf("  Inspect hooks:      %s\n", yesNo(answers.InspectHooks))
+	fmt.Printf("  Run doctor:         %s\n", yesNo(answers.RunDoctor))
+	fmt.Printf("  Workflow mode:      %s\n", answers.WorkflowMode)
+	if !write {
+		fmt.Println()
+		fmt.Println("Mode: preview. Mutation requires --allow-mutation and --write.")
+	}
+}
+
+func wizardBool(label string, def bool) (bool, string) {
+	for {
+		value, control := wizardPrompt(label+" "+boolDefaultLabel(def)+":", "")
+		if control != "" {
+			return false, control
+		}
+		value = strings.ToLower(strings.TrimSpace(value))
+		if value == "" {
+			return def, ""
+		}
+		switch value {
+		case "y", "yes":
+			return true, ""
+		case "n", "no":
+			return false, ""
+		default:
+			fmt.Println("Please answer y or n. Type help, back, or quit for wizard controls.")
+		}
+	}
+}
+
+func wizardSelect(label string, options []string, def string) (string, string) {
+	defaultIndex := 1
+	for i, option := range options {
+		fmt.Printf("%d. %s\n", i+1, option)
+		if option == def {
+			defaultIndex = i + 1
+		}
+	}
+	for {
+		value, control := wizardPrompt(fmt.Sprintf("%s [%d]:", label, defaultIndex), "")
+		if control != "" {
+			return "", control
+		}
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return options[defaultIndex-1], ""
+		}
+		if idx, err := strconv.Atoi(value); err == nil && idx >= 1 && idx <= len(options) {
+			return options[idx-1], ""
+		}
+		for _, option := range options {
+			if value == option {
+				return option, ""
+			}
+		}
+		fmt.Println("Please select a listed number or value.")
+	}
+}
+
+func wizardPrompt(label string, def string) (string, string) {
+	fmt.Print(label + " ")
+	value, _ := promptReader.ReadString('\n')
+	value = strings.TrimSpace(value)
+	switch strings.ToLower(value) {
+	case "help":
+		fmt.Println("Enter accepts the default. Type back to cancel the current wizard run, or quit to exit without writing.")
+		return "", ""
+	case "back", "quit":
+		return "", strings.ToLower(value)
+	default:
+		if value == "" {
+			return def, ""
+		}
+		return value, ""
+	}
+}
+
+func handleWizardControl(control string) int {
+	if control == "quit" {
+		fmt.Println("setup cancelled")
+		return 1
+	}
+	fmt.Println("back is supported by restarting the current wizard run; no files were written")
+	return 1
+}
+
+func profileDisplayName(profile string) string {
+	names := map[string]string{
+		"generic":     "Generic project",
+		"go-tool":     "Go CLI tool",
+		"static-site": "Static site",
+		"js-app":      "JavaScript app",
+		"php-app":     "PHP app",
+		"native-app":  "Native app",
+		"mixed":       "Mixed project",
+		"custom":      "Custom project",
+	}
+	if name, ok := names[profile]; ok {
+		return name
+	}
+	return profile
+}
+
+func boolDefaultLabel(def bool) string {
+	if def {
+		return "[Y/n]"
+	}
+	return "[y/N]"
+}
+
+func yesNo(value bool) string {
+	if value {
+		return "yes"
+	}
+	return "no"
+}
+
+func gateNames(gates []gateConfig) string {
+	names := make([]string, 0, len(gates))
+	for _, gate := range gates {
+		names = append(names, gate.Name)
+	}
+	if len(names) == 0 {
+		return "none"
+	}
+	return strings.Join(names, ", ")
+}
+
+func selectGatesByName(gates []gateConfig, names []string) []gateConfig {
+	wanted := stringSet(names)
+	selected := []gateConfig{}
+	for _, gate := range gates {
+		if wanted[gate.Name] {
+			selected = append(selected, gate)
+		}
+	}
+	return selected
+}
+
+func shellQuote(value string) string {
+	if value == "" {
+		return "''"
+	}
+	if strings.IndexFunc(value, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z') && !(r >= 'A' && r <= 'Z') && !(r >= '0' && r <= '9') && !strings.ContainsRune("-_./:", r)
+	}) < 0 {
+		return value
+	}
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
+}
+
+func inspectHooks() {
+	root := gitRoot()
+	if root == "" {
+		fmt.Printf("%s not inside a Git checkout; hooks cannot be inspected\n", statusLabel("warn"))
+		return
+	}
+	for _, hook := range []string{"pre-commit", "pre-push"} {
+		path := filepath.Join(root, ".git", "hooks", hook)
+		if !fileExists(path) {
+			fmt.Printf("%s hook missing: %s\n", statusLabel("warn"), hook)
+			continue
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			fmt.Printf("%s hook unreadable: %s\n", statusLabel("warn"), hook)
+			continue
+		}
+		sum := sha256.Sum256(data)
+		fmt.Printf("%s hook present: %s sha256=%x\n", statusLabel("ok"), hook, sum[:6])
+	}
+}
+
+func isInteractiveTerminal() bool {
+	info, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice != 0
 }
 
 func buildSetupPlan(configPath string, requestedProfile string) map[string]any {
@@ -1747,7 +2211,7 @@ func activeCommands() []commandInfo {
 		{Command: "config:template", Source: "core", Description: "Print a versioned starter config for a selected profile."},
 		{Command: "completion", Source: "core", Description: "Generate shell completion for bash, zsh, or fish."},
 		{Command: "deps:inventory", Source: "core", Description: "Inventory common dependency manifests and lockfiles."},
-		{Command: "doctor", Source: "core", Description: "Check local readiness for using Vigil Core as a GitHub-adjacent helper."},
+		{Command: "doctor", Source: "core", Description: "Check local readiness for using Vigil as a GitHub-adjacent helper."},
 		{Command: "explain", Source: "core", Description: "Explain a command's source, access, and usage."},
 		{Command: "extensions:list", Source: "core", Description: "List loaded extension manifests."},
 		{Command: "extensions:doctor", Source: "core", Description: "Validate loaded extension manifests."},
@@ -1755,20 +2219,24 @@ func activeCommands() []commandInfo {
 		{Command: "hooks:install", Source: "core", Description: "Install Vigil git hook shims into the current repository."},
 		{Command: "hooks:pre-commit", Source: "core", Description: "Run pre-commit checks from Vigil config."},
 		{Command: "hooks:pre-push", Source: "core", Description: "Run pre-push checks from Vigil config."},
+		{Command: "init", Source: "core", Description: "Alias for setup:wizard."},
 		{Command: "init:ci", Source: "core", Description: "Generate GitHub Actions helper workflows from loaded Vigil checks."},
 		{Command: "list", Source: "core", Description: "List core and loaded extension commands."},
+		{Command: "manpage", Source: "core", Description: "Generate the vigil(1) manual page."},
+		{Command: "manpage:generate", Source: "core", Description: "Generate the vigil(1) manual page."},
+		{Command: "manpage:install", Source: "core", Description: "Install the vigil(1) manual page."},
 		{Command: "next", Source: "core", Description: "Prioritize next local setup and verification actions."},
 		{Command: "plan", Source: "core", Description: "Explain which configured local checks Vigil would run."},
 		{Command: "resources:catalog", Source: "core", Description: "List public local diagnostic resources."},
 		{Command: "self-heal:plan", Source: "core", Description: "Suggest safe repairs for local configuration and setup."},
 		{Command: "settings:show", Source: "core", Description: "Alias for config:report."},
 		{Command: "setup", Source: "core", Description: "Plan or apply first-run Vigil configuration setup."},
-		{Command: "setup:wizard", Source: "core", Description: "Alias for setup."},
+		{Command: "setup:wizard", Source: "core", Description: "Run the interactive setup wizard."},
 		{Command: "status", Source: "core", Description: "Summarize config, extension, git, and command readiness."},
 		{Command: "support:bundle", Source: "core", Description: "Write or preview a redacted local diagnostic bundle."},
 		{Command: "tools:catalog", Source: "core", Description: "List public tools and command contracts."},
 		{Command: "verify", Source: "core", Description: "Run the public readiness proof set."},
-		{Command: "version", Source: "core", Description: "Print Vigil Core version metadata."},
+		{Command: "version", Source: "core", Description: "Print Vigil version metadata."},
 		{Command: "workflow:local", Source: "core", Description: "Preview or run configured local preflight checks."},
 	}
 	for _, ext := range loadExtensions(extensionRoot()).Extensions {
@@ -1799,6 +2267,28 @@ func activeCommands() []commandInfo {
 	}
 	sort.Slice(commands, func(i, j int) bool { return commands[i].Command < commands[j].Command })
 	return commands
+}
+
+func commandCategory(command commandInfo) string {
+	if strings.HasPrefix(command.Source, "extension:") {
+		return "Extensions"
+	}
+	switch {
+	case command.Command == "init" || command.Command == "setup" || command.Command == "setup:wizard":
+		return "Setup"
+	case strings.HasPrefix(command.Command, "checks:") || strings.HasPrefix(command.Command, "deps:") || command.Command == "verify":
+		return "Checks"
+	case strings.HasPrefix(command.Command, "config:") || command.Command == "settings:show":
+		return "Config"
+	case strings.HasPrefix(command.Command, "extensions:"):
+		return "Extensions"
+	case command.Command == "init:ci" || command.Command == "github:init-ci" || strings.HasPrefix(command.Command, "hooks:"):
+		return "Automation"
+	case command.Command == "completion" || strings.HasPrefix(command.Command, "manpage"):
+		return "Packaging"
+	default:
+		return "Core"
+	}
 }
 
 func relatedCommands(command string) []string {
@@ -1855,7 +2345,7 @@ func commandAccess(command string) string {
 		return access
 	}
 	switch command {
-	case "config:init", "config:migrate", "config:repair", "github:init-ci", "hooks:install", "hooks:pre-commit", "hooks:pre-push", "init:ci", "readme:generate", "setup", "setup:wizard", "support:bundle", "workflow:local":
+	case "config:init", "config:migrate", "config:repair", "github:init-ci", "hooks:install", "hooks:pre-commit", "hooks:pre-push", "init", "init:ci", "manpage:install", "readme:generate", "setup", "setup:wizard", "support:bundle", "workflow:local":
 		return "conditional-write"
 	default:
 		return "read"
@@ -1867,7 +2357,7 @@ func commandWriteFlags(command string) []string {
 		return append([]string{}, contract.WriteFlags...)
 	}
 	switch command {
-	case "config:init", "setup", "setup:wizard":
+	case "config:init", "init", "setup", "setup:wizard":
 		return []string{"--write", "--force"}
 	case "config:migrate", "github:init-ci", "init:ci":
 		return []string{"--write"}
@@ -2514,7 +3004,7 @@ func vigilCoreInstallRef() string {
 func vigilCoreSourceRoot() string {
 	if root := findFileUpward(mustGetwd(), "go.mod"); root != "" {
 		data, err := os.ReadFile(root)
-		if err == nil && strings.Contains(string(data), "module github.com/PayCal-Technologies/vigil-core") {
+		if err == nil && strings.Contains(string(data), "module github.com/PayCal-Technologies/vigil-public") {
 			return filepath.Dir(root)
 		}
 	}
@@ -2629,6 +3119,65 @@ func completion(args []string) int {
 		return 2
 	}
 	return 0
+}
+
+func manpageGenerate(args []string) int {
+	fs := flag.NewFlagSet("manpage", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	output := fs.String("output", "", "write manpage to path instead of stdout")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	content := generateManpage()
+	if strings.TrimSpace(*output) == "" {
+		fmt.Print(content)
+		return 0
+	}
+	if err := os.MkdirAll(filepath.Dir(*output), 0o755); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	if _, err := atomicWriteFile(*output, []byte(content), fileExists(*output)); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	fmt.Printf("wrote %s\n", *output)
+	return 0
+}
+
+func manpageInstall(args []string) int {
+	fs := flag.NewFlagSet("manpage:install", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	prefix := fs.String("prefix", "/usr/local", "installation prefix")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	path := filepath.Join(*prefix, "share", "man", "man1", "vigil.1")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	if _, err := atomicWriteFile(path, []byte(generateManpage()), fileExists(path)); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	fmt.Printf("installed %s\n", path)
+	return 0
+}
+
+func generateManpage() string {
+	var b strings.Builder
+	b.WriteString(".TH VIGIL 1 \"" + time.Now().UTC().Format("2006-01-02") + "\" \"vigil " + version + "\" \"User Commands\"\n")
+	b.WriteString(".SH NAME\nvigil \\- repository preflight, setup, and agent-safety CLI\n")
+	b.WriteString(".SH SYNOPSIS\n.B vigil\n[--config PATH] [--allow-mutation|--auto] <command> [args]\n")
+	b.WriteString(".SH DESCRIPTION\nVigil is a GitHub-adjacent release, configuration, preflight, and agent-safety tool. It explains repository automation before it mutates anything.\n")
+	b.WriteString(".SH COMMANDS\n")
+	for _, command := range activeCommands() {
+		b.WriteString(".TP\n.B " + command.Command + "\n" + command.Description + "\n")
+	}
+	b.WriteString(".SH SETUP\nRun .B vigil setup:wizard or .B vigil init for guided configuration. Use .B vigil --allow-mutation setup:wizard to permit confirmed writes.\n")
+	b.WriteString(".SH LICENSE\n0BSD\n")
+	return b.String()
 }
 
 func filesIterate(args []string) int {
