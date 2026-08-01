@@ -50,9 +50,10 @@ plugins, repository `HEAD`, and workspace have all been accepted.
 
 ## Binary Rollback
 
-Reinstall the retained immutable archive for the previous version and verify it
-against that release's checksums and provenance. Then run the same validation
-sequence above.
+Reinstall the retained archive for the previous version and verify it against
+that release's checksums and provenance. For releases produced after repository
+immutability was enabled, use the immutable release record as part of that
+verification. Then run the same validation sequence above.
 
 If the old binary does not understand the migrated config, restore the exact
 `.bak-*` file through the repository's normal reviewed file-change process.

@@ -1,15 +1,19 @@
 # Homebrew Packaging
 
-Every stable release deterministically generates `dist/vigil.rb` from the four
-final archive digests after macOS signing. The release workflow installs,
-styles, audits, and tests the formula on macOS, then publishes it to
-`PayCal-Technologies/homebrew-tap` using a separately scoped
+The current release workflow deterministically generates `dist/vigil.rb` for
+stable releases from the four final archive digests after macOS signing. The
+workflow installs, styles, audits, and tests the formula on macOS, then
+publishes it to `PayCal-Technologies/homebrew-tap` using a separately scoped
 `HOMEBREW_TAP_TOKEN`. Before stable publication, both native macOS targets
 install the exact formula against their matching downloaded draft archive
 through a byte-identical, canonically named temporary local copy and URL. The
 canonical `vigil-X.Y.Z.tar.gz` name preserves Homebrew's version inference.
 After publication, both targets repeat install, online audit, and test through
 the unchanged public URLs before the tap is updated.
+
+No public Homebrew install command exists yet. As of 2026-08-01, the release
+environment has no configured secrets and the project tap formula has not been
+published from a stable public release.
 
 Official references:
 
@@ -64,8 +68,8 @@ recommend `go install`.
 
 The public README should not advertise `brew install` until the project tap has
 a formula produced from public release assets and verified by the stable release
-workflow. Before that point, Homebrew support is considered packaging-ready,
-not user-install-ready.
+workflow. Before that point, Homebrew support is automation-ready, not
+user-install-ready.
 
 Expected path:
 
@@ -80,7 +84,7 @@ Expected path:
 ## Package Requirements
 
 - The project license must be machine-detectable. This repo uses 0BSD.
-- Release tags must be immutable.
+- Release tags created under the current release workflow must be immutable.
 - Formula tests must exercise the installed binary, not just `--version`.
 - The binary must not self-update or write outside normal user-selected paths.
 - Setup commands must remain explicit about mutations.

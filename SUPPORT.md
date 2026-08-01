@@ -10,5 +10,5 @@ Use GitHub issues for:
 
 For security reports, use `SECURITY.md`.
 
-For general project direction, open a discussion when GitHub Discussions are
-enabled for the repository.
+GitHub Discussions are not currently enabled for this repository. Use issues
+for public project direction until that changes.

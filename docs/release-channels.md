@@ -15,8 +15,10 @@ through native smoke and a local-asset formula install, then is published once
 as latest. Public-URL Homebrew audit and tap synchronization remain required
 downstream release-workflow evidence.
 
-Stable releases are immutable. A correction requires a new semantic version;
-assets and tags are never replaced in place.
+Stable releases produced after repository immutability was enabled are
+immutable. A correction requires a new semantic version; assets and tags are
+never replaced in place. The existing `v0.1.0` bootstrap release predates that
+repository setting and is not part of the current release-workflow contract.
 
 ## Beta
 
@@ -27,7 +29,7 @@ the draft assets pass that matrix, and they never replace the latest stable
 release. Stable-only Homebrew install, online audit, and tap publication jobs
 are skipped.
 
-Enable GitHub release immutability for the repository. Because published
+GitHub release immutability is enabled for the repository. Because published
 immutable releases permit only title and note edits, Vigil never relies on
 changing a published prerelease into a stable release.
 

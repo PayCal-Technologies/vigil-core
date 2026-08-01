@@ -3,6 +3,25 @@
 This checklist covers GitHub repository settings that cannot be proven from the
 source tree alone. Complete it before pushing a beta or stable release tag.
 
+## Verified Repository State
+
+Last verified: 2026-08-01.
+
+- Current public release: `v0.1.0`.
+- Current remote tags: `v0.1.0`.
+- Latest `main` quality workflow: passing at
+  `5b23c784285dd5bc9f5f0c37abb30f5b059a29e0`.
+- Actions setting: enabled, with all actions allowed.
+- Default workflow token permission: read-only. The release workflow requests
+  its required `contents`, `id-token`, and `attestations` permissions
+  explicitly.
+- GitHub release immutability setting: enabled for future releases.
+- Existing `v0.1.0` release immutability: false.
+- `release` environment: exists.
+- Required reviewer on `release`: `cshaiku`.
+- Current `release` deployment policy: protected branches only.
+- `release` environment secrets: none configured.
+
 ## Required Repository Settings
 
 - Actions are enabled for the repository.
@@ -15,10 +34,10 @@ source tree alone. Complete it before pushing a beta or stable release tag.
 - The `release` environment allows deployment from semantic-version tags such
   as `v*`.
 
-As of the initial release-readiness pass, immutable releases are enabled and the
-`release` environment exists with `cshaiku` as a required reviewer. Maintainers
-still need to confirm that the environment permits deployment from release tags
-such as `v*`, and add the required secrets.
+As of the latest release-readiness pass, immutable releases are enabled and the
+`release` environment exists with `cshaiku` as a required reviewer. The
+environment still needs a release-tag deployment policy such as `v*`, and the
+required secrets still need to be added.
 
 ## Required Release Secrets
 
@@ -58,8 +77,14 @@ Before tagging:
 
 ```bash
 gh auth status -h github.com
-gh api repos/PayCal-Technologies/vigil-public/immutable-releases --jq .enabled
-gh api repos/PayCal-Technologies/vigil-public/environments --jq '.environments[].name'
+gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
+  repos/PayCal-Technologies/vigil-public/immutable-releases --jq .enabled
+gh api repos/PayCal-Technologies/vigil-public/actions/permissions \
+  --jq '{enabled, allowed_actions}'
+gh api repos/PayCal-Technologies/vigil-public/actions/permissions/workflow \
+  --jq '{default_workflow_permissions, can_approve_pull_request_reviews}'
+gh api repos/PayCal-Technologies/vigil-public/environments/release \
+  --jq '{name, protection_rules, deployment_branch_policy}'
 gh secret list --env release --repo PayCal-Technologies/vigil-public
 git ls-remote --tags origin
 ```

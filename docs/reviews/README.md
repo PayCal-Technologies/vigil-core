@@ -70,11 +70,11 @@ Operational release evidence is collected separately:
 ```bash
 go run ./scripts/collect-v1-operational-evidence.go \
   --repo PayCal-Technologies/vigil-public \
-  --tag v0.4.0 \
+  --tag v0.2.0-beta.1 \
   --tap-repo PayCal-Technologies/homebrew-tap \
   --workflow-run-id "$GITHUB_RUN_ID" \
   --require-release-proof \
-  --output docs/reviews/v1-operational-evidence-v0.4.0.json
+  --output docs/reviews/v1-operational-evidence-v0.2.0-beta.1.json
 ```
 
 That report can support VIGIL-AC-09 and VIGIL-AC-11 through VIGIL-AC-13. Add

@@ -5,6 +5,11 @@ locally built binaries as official assets.
 Before pushing a release tag, complete the repository-side checks in
 [`github-release-readiness.md`](github-release-readiness.md).
 
+`v0.1.0` is a legacy bootstrap release. It has raw platform binaries,
+completions, a manpage, and `SHA256SUMS`, but it predates the current archive,
+macOS signing/notarization, SBOM, Sigstore, attestation, Homebrew, immutable
+release, and v1 gate workflow contract.
+
 Stable tags use `vX.Y.Z`. Prerelease tags such as `vX.Y.Z-beta.N` produce beta
 releases without replacing the latest stable release. Scheduled and manually
 dispatched nightlies use `.github/workflows/nightly.yml`; see
@@ -166,10 +171,10 @@ Stable and beta tags fail closed unless these GitHub Actions secrets exist:
 Store these as secrets on a reviewer-protected GitHub `release` environment.
 `RELEASE_ADMIN_READ_TOKEN` must be a fine-grained token scoped only to this
 repository with read-only `Administration` permission. It is used only to call
-GitHub's immutable-releases status endpoint before signing. Enable GitHub
-release immutability before the first operational release; the workflow fails
-closed when the policy cannot be proven. Its draft-first, single-publication
-sequence is designed for that repository policy.
+GitHub's immutable-releases status endpoint before signing. GitHub release
+immutability is enabled for future releases; keep it enabled. The workflow
+fails closed when the policy cannot be proven. Its draft-first,
+single-publication sequence is designed for that repository policy.
 The certificate and App Store Connect notary key are written only beneath
 `RUNNER_TEMP`; the workflow deletes the ephemeral keychain and key files in an
 `always()` cleanup step. Standalone command-line binaries cannot carry a
