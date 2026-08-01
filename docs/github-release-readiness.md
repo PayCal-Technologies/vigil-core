@@ -11,8 +11,9 @@ Last verified: 2026-08-01.
 
 - Current public release: `v0.1.0`.
 - Current remote tags: `v0.1.0`.
-- Latest `main` quality workflow: passing at
-  `5b23c784285dd5bc9f5f0c37abb30f5b059a29e0`.
+- Latest `main` quality workflow: must be completed successfully for
+  `origin/main`; `scripts/check-github-release-readiness.sh` verifies this
+  before tagging.
 - Actions setting: enabled, with all actions allowed.
 - Default workflow token permission: read-only. The release workflow requests
   its required `contents`, `id-token`, and `attestations` permissions
@@ -80,17 +81,7 @@ Stable releases also require:
 Before tagging:
 
 ```bash
-gh auth status -h github.com
-gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
-  repos/PayCal-Technologies/vigil-public/immutable-releases --jq .enabled
-gh api repos/PayCal-Technologies/vigil-public/actions/permissions \
-  --jq '{enabled, allowed_actions}'
-gh api repos/PayCal-Technologies/vigil-public/actions/permissions/workflow \
-  --jq '{default_workflow_permissions, can_approve_pull_request_reviews}'
-gh api repos/PayCal-Technologies/vigil-public/environments/release \
-  --jq '{name, protection_rules, deployment_branch_policy}'
-gh secret list --env release --repo PayCal-Technologies/vigil-public
-git ls-remote --tags origin
+scripts/check-github-release-readiness.sh --tag v0.2.0-beta.1
 ```
 
 Then run the local candidate smoke from `main`:

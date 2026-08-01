@@ -85,6 +85,11 @@ assets intact but keeps the workflow and Homebrew acceptance criterion open.
 
    The release workflow requires Apple signing/notary credentials for both beta
    and stable tags. Stable tags additionally run Homebrew publication checks.
+   Maintainers can verify the beta prerequisites with:
+
+   ```bash
+   scripts/check-github-release-readiness.sh --tag v0.2.0-beta.1
+   ```
 
 4. Run the release builder locally with a candidate version:
 

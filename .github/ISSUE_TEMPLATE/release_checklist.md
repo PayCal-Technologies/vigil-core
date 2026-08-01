@@ -21,6 +21,7 @@ labels: release
 - [ ] `RELEASE_ADMIN_READ_TOKEN` is configured with read-only Administration
       permission for this repository.
 - [ ] Stable only: `HOMEBREW_TAP_TOKEN` is configured for the project tap.
+- [ ] `scripts/check-github-release-readiness.sh --tag vX.Y.Z` passes.
 
 ## Local Candidate Smoke
 
