@@ -13,3 +13,7 @@ Project principles:
 - deterministic machine-readable output;
 - clear setup paths for new users;
 - no private deployment assumptions in the public repository.
+
+Compatibility and safety changes use the public
+[RFC process](docs/rfcs/README.md). Maintainer decisions record rationale,
+migration, rollback, and any unresolved dissent.

@@ -27,3 +27,8 @@ Commands that write files or hooks should require explicit confirmation through
 
 Use GitHub issues for bugs, feature requests, and packaging feedback. Security
 reports should follow `SECURITY.md`.
+
+Changes to product scope, safety invariants, stable contracts, plugin trust,
+mutation policy, or supported distribution commitments follow the
+[RFC process](docs/rfcs/README.md) and
+[deprecation policy](docs/deprecations.md).
