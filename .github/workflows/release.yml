@@ -81,7 +81,7 @@ jobs:
         run: |
           if [[ "${{ steps.v1_acceptance.outputs.exit_code }}" != "0" ]]; then
             echo "stable v1 acceptance gate failed; see v1-acceptance-gate.json" >&2
-            exit "${{ steps.v1_acceptance.outputs.exit_code }}"
+            exit 1
           fi
 
       - name: Refuse release asset replacement
@@ -132,7 +132,8 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
           SKIP_HOMEBREW_FORMULA: '1'
         run: |
-          export SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          export SOURCE_DATE_EPOCH
           scripts/build-release.sh
 
       - name: Verify reproducibility
@@ -140,7 +141,8 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
           SKIP_HOMEBREW_FORMULA: '1'
         run: |
-          export SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          export SOURCE_DATE_EPOCH
           scripts/check-release-reproducibility.sh dist
 
       - name: Upload reproducible unsigned candidate
@@ -231,9 +233,11 @@ jobs:
           keychain_path="$RUNNER_TEMP/vigil-signing.keychain-db"
           keychain_password="$(openssl rand -hex 32)"
 
-          printf 'APPLE_NOTARY_KEY_PATH=%s\n' "$notary_key_path" >> "$GITHUB_ENV"
-          printf 'VIGIL_CERTIFICATE_PATH=%s\n' "$certificate_path" >> "$GITHUB_ENV"
-          printf 'VIGIL_KEYCHAIN_PATH=%s\n' "$keychain_path" >> "$GITHUB_ENV"
+          {
+            printf 'APPLE_NOTARY_KEY_PATH=%s\n' "$notary_key_path"
+            printf 'VIGIL_CERTIFICATE_PATH=%s\n' "$certificate_path"
+            printf 'VIGIL_KEYCHAIN_PATH=%s\n' "$keychain_path"
+          } >> "$GITHUB_ENV"
 
           printf '%s' "$APPLE_DEVELOPER_ID_CERTIFICATE_BASE64" | base64 -D > "$certificate_path"
           printf '%s' "$APPLE_NOTARY_PRIVATE_KEY_BASE64" | base64 -D > "$notary_key_path"

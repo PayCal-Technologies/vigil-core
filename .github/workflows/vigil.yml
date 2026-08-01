@@ -90,7 +90,8 @@ jobs:
           export RELEASE_TAG=v0.0.0-quality.1
           export VERSION=0.0.0-quality.1
           export COMMIT="$GITHUB_SHA"
-          export SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          export SOURCE_DATE_EPOCH
           export ALLOW_UNTAGGED_RELEASE=1
           scripts/build-release.sh
           scripts/check-release-reproducibility.sh dist
