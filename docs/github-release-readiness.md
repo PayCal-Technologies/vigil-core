@@ -21,6 +21,8 @@ Last verified: 2026-08-01.
 - Required reviewer on `release`: `cshaiku`.
 - Current `release` deployment policy: protected branches only.
 - `release` environment secrets: none configured.
+- Homebrew tap repository: `PayCal-Technologies/homebrew-tap` exists.
+- Homebrew tap formula: `Formula/vigil.rb` has not been published.
 
 ## Required Repository Settings
 

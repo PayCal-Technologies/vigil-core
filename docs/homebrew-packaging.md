@@ -11,9 +11,10 @@ canonical `vigil-X.Y.Z.tar.gz` name preserves Homebrew's version inference.
 After publication, both targets repeat install, online audit, and test through
 the unchanged public URLs before the tap is updated.
 
-No public Homebrew install command exists yet. As of 2026-08-01, the release
-environment has no configured secrets and the project tap formula has not been
-published from a stable public release.
+No public Homebrew install command exists yet. As of 2026-08-01,
+`PayCal-Technologies/homebrew-tap` exists, but the release environment has no
+configured secrets and the project tap formula has not been published from a
+stable public release.
 
 Official references:
 
