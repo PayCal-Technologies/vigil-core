@@ -1,0 +1,232 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vigil.dev/schemas/vigil-v1-acceptance-gate-v1.schema.json",
+  "title": "Vigil v1 acceptance gate report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "target",
+    "version",
+    "acceptance_ledger",
+    "gate_required",
+    "status",
+    "pending_count",
+    "pending",
+    "errors"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "target": {
+      "const": "v1.0"
+    },
+    "version": {
+      "type": "string"
+    },
+    "acceptance_ledger": {
+      "$ref": "#/$defs/relative_path"
+    },
+    "gate_required": {
+      "type": "boolean"
+    },
+    "status": {
+      "enum": [
+        "not_required",
+        "blocked",
+        "satisfied",
+        "invalid"
+      ]
+    },
+    "pending_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "pending": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/pending_criterion"
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "\\S"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "blocked"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "version": {
+            "pattern": "\\S"
+          },
+          "gate_required": {
+            "const": true
+          },
+          "pending_count": {
+            "minimum": 1
+          },
+          "pending": {
+            "minItems": 1
+          },
+          "errors": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "satisfied"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "version": {
+            "pattern": "\\S"
+          },
+          "gate_required": {
+            "const": true
+          },
+          "pending_count": {
+            "const": 0
+          },
+          "pending": {
+            "maxItems": 0
+          },
+          "errors": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "not_required"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "version": {
+            "pattern": "\\S"
+          },
+          "gate_required": {
+            "const": false
+          },
+          "pending_count": {
+            "const": 0
+          },
+          "pending": {
+            "maxItems": 0
+          },
+          "errors": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "invalid"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "gate_required": {
+            "const": false
+          },
+          "pending_count": {
+            "const": 0
+          },
+          "pending": {
+            "maxItems": 0
+          },
+          "errors": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "criterion_id": {
+      "type": "string",
+      "pattern": "^VIGIL-(SI|AC)-[0-9]{2}$"
+    },
+    "relative_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?=.*\\S)(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+"
+    },
+    "pending_criterion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "domain",
+        "statement",
+        "status",
+        "blocker"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/criterion_id"
+        },
+        "domain": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "statement": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "status": {
+          "enum": [
+            "operational_pending",
+            "external_pending"
+          ]
+        },
+        "blocker": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,252 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vigil.dev/schemas/vigil-external-evidence-v1.schema.json",
+  "title": "Vigil v1 external evidence report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "target",
+    "generated_at",
+    "candidate_commit",
+    "public_url",
+    "reviewer",
+    "criteria"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "target": {
+      "const": "v1.0"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "candidate_commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "candidate_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "public_url": {
+      "$ref": "#/$defs/https_url"
+    },
+    "reviewer": {
+      "$ref": "#/$defs/reviewer"
+    },
+    "criteria": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/criterion"
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "criteria": {
+            "contains": {
+              "$ref": "#/$defs/verified_ac21"
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "findings"
+        ],
+        "properties": {
+          "findings": {
+            "not": {
+              "contains": {
+                "$ref": "#/$defs/open_p0_p1_finding"
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "external_criterion_id": {
+      "enum": [
+        "VIGIL-AC-16",
+        "VIGIL-AC-17",
+        "VIGIL-AC-19",
+        "VIGIL-AC-20",
+        "VIGIL-AC-21"
+      ]
+    },
+    "https_url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://[^/?@#]+(?:[/?][^#]*)?$"
+    },
+    "reviewer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "relationship",
+        "independent"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "organization": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "relationship": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "independent": {
+          "const": true
+        }
+      }
+    },
+    "criterion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "status",
+        "detail"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/external_criterion_id"
+        },
+        "status": {
+          "enum": [
+            "verified",
+            "failed",
+            "pending"
+          ]
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/https_url"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "const": "verified"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "evidence"
+            ]
+          }
+        }
+      ]
+    },
+    "verified_ac21": {
+      "type": "object",
+      "required": [
+        "id",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "const": "VIGIL-AC-21"
+        },
+        "status": {
+          "const": "verified"
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "severity",
+        "status",
+        "summary"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^VIGIL-F-[0-9]{3}$"
+        },
+        "severity": {
+          "enum": [
+            "P0",
+            "P1",
+            "P2",
+            "P3"
+          ]
+        },
+        "status": {
+          "enum": [
+            "open",
+            "closed",
+            "false_positive",
+            "not_applicable"
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "url": {
+          "$ref": "#/$defs/https_url"
+        }
+      }
+    },
+    "open_p0_p1_finding": {
+      "type": "object",
+      "required": [
+        "severity",
+        "status"
+      ],
+      "properties": {
+        "severity": {
+          "enum": [
+            "P0",
+            "P1"
+          ]
+        },
+        "status": {
+          "const": "open"
+        }
+      }
+    }
+  }
+}

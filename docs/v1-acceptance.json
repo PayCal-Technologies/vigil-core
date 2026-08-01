@@ -1,0 +1,584 @@
+{
+  "schema_version": "1",
+  "target": "v1.0",
+  "criteria": [
+    {
+      "id": "VIGIL-SI-01",
+      "domain": "safety",
+      "statement": "Unknown access, capability, binding, and host compatibility fail closed.",
+      "status": "verified",
+      "evidence": [
+        {
+          "kind": "go_test",
+          "path": "internal/cli/registry_test.go",
+          "symbol": "TestRegistryRejectsIncompleteOrContradictoryExecutionMetadata"
+        },
+        {
+          "kind": "go_test",
+          "path": "internal/packs/packs_test.go",
+          "symbol": "TestValidateRequiresCompleteCommandContract"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-SI-02",
+      "domain": "safety",
+      "statement": "Mutation requires an explicit reviewed activation path.",
+      "status": "verified",
+      "evidence": [
+        {
+          "kind": "go_test",
+          "path": "cmd/vigil/main_test.go",
+          "symbol": "TestMutationRequirementsFailClosed"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-SI-03",
+      "domain": "safety",
+      "statement": "Read-only execution is fingerprint-verified without being represented as an operating-system sandbox.",
+      "status": "verified",
+      "evidence": [
+        {
+          "kind": "go_test",
+          "path": "cmd/vigil/main_test.go",
+          "symbol": "TestParallelReadOnlyMutationMarksEntireBatchAsViolated"
+        },
+        {
+          "kind": "go_test",
+          "path": "cmd/vigil/main_test.go",
+          "symbol": "TestBoundedHelperCommandFailsClosedOnTruncatedOutput"
+        },
+        {
+          "kind": "document",
+          "path": "docs/concepts/mutation-model.md"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-SI-04",
+      "domain": "safety",
+      "statement": "Pack precedence is deterministic.",
+      "status": "verified",
+      "evidence": [
+        {
+          "kind": "go_test",
+          "path": "internal/packs/packs_test.go",
+          "symbol": "TestRepositoryLayerOverridesOfficialPackAndReportsIt"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-SI-05",
+      "domain": "safety",
+      "statement": "Pack discovery cannot escape declared roots through traversal or symlinks.",
+      "status": "verified",
+      "evidence": [
+        {
+          "kind": "go_test",
+          "path": "cmd/vigil/main_test.go",
+          "symbol": "TestExtensionRootRejectsTraversalAndSymlinkEscape"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-SI-06",
+      "domain": "safety",
+      "statement": "Executed processes are cancellable and bounded by policy.",
+      "status": "verified",
+      "evidence": [
+        {
+          "kind": "go_test",
+          "path": "internal/runner/runner_test.go",
+          "symbol": "TestRunTimesOutProcessGroup"
+        },
+        {
+          "kind": "go_test",
+          "path": "internal/runner/runner_test.go",
+          "symbol": "TestRunTimeoutTerminatesSpawnedChild"
+        },
+        {
+          "kind": "go_test",
+          "path": "internal/runner/runner_test.go",
+          "symbol": "TestRunHonorsCancellation"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-SI-07",
+      "domain": "safety",
+      "statement": "Plugin execution and signed acquisition require exact lock, trust, policy, protocol, and provenance checks.",
+      "status": "verified",
+      "evidence": [
+        {
+          "kind": "go_test",
+          "path": "internal/plugins/plugins_test.go",
+          "symbol": "TestPluginLifecyclePinsTrustsDiscoversExecutesAndRevokes"
+        },
+        {
+          "kind": "go_test",
+          "path": "internal/plugins/plugins_test.go",
+          "symbol": "TestSignedIndexSelectsAcquiresAndPinsExactPlugin"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-SI-08",
+      "domain": "safety",
+      "statement": "Machine output and exit meanings are versioned public APIs.",
+      "status": "verified",
+      "evidence": [
+        {
+          "kind": "go_test",
+          "path": "internal/output/envelope_test.go",
+          "symbol": "TestEnvelopeV1GoldenCompatibilityFixtures"
+        },
+        {
+          "kind": "go_test",
+          "path": "internal/output/envelope_test.go",
+          "symbol": "TestValidateEnvelopeRejectsInconsistentDuration"
+        },
+        {
+          "kind": "go_test",
+          "path": "internal/contracts/contracts_test.go",
+          "symbol": "TestOutputSchemaMatchesRuntimeExitStatusContract"
+        },
+        {
+          "kind": "go_test",
+          "path": "internal/contracts/contracts_test.go",
+          "symbol": "TestJSONLEventSchemaMatchesRuntimeContract"
+        },
+        {
+          "kind": "go_test",
+          "path": "internal/cli/exits_test.go",
+          "symbol": "TestExitTaxonomyIsCompleteAndStable"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-SI-09",
+      "domain": "safety",
+      "statement": "Support artifacts are local, redacted, atomic, and private.",
+      "status": "verified",
+      "evidence": [
+        {
+          "kind": "go_test",
+          "path": "internal/support/bundle_test.go",
+          "symbol": "TestBuildIsContentStableAndRedactsPathsByDefault"
+        },
+        {
+          "kind": "go_test",
+          "path": "internal/support/bundle_test.go",
+          "symbol": "TestDiagnosticRedactionMasksCommonSecretValues"
+        },
+        {
+          "kind": "go_test",
+          "path": "internal/support/bundle_test.go",
+          "symbol": "TestWriteUsesMode0600"
+        },
+        {
+          "kind": "go_test",
+          "path": "internal/runartifact/artifact_test.go",
+          "symbol": "TestRunWritesPrivatePlanLogsAndResult"
+        },
+        {
+          "kind": "go_test",
+          "path": "internal/runartifact/artifact_test.go",
+          "symbol": "TestValidateManifestRejectsInvalidContractFields"
+        },
+        {
+          "kind": "schema",
+          "path": "schemas/vigil-run-artifact-manifest-v1.schema.json"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-SI-10",
+      "domain": "safety",
+      "statement": "Reviewed plans apply only while every bound input remains exact.",
+      "status": "verified",
+      "evidence": [
+        {
+          "kind": "go_test",
+          "path": "cmd/vigil/main_test.go",
+          "symbol": "TestReviewedPlanRejectsConfigAndRepositoryDrift"
+        },
+        {
+          "kind": "go_test",
+          "path": "cmd/vigil/main_test.go",
+          "symbol": "TestReviewedPlanRejectsPackRegistryAndBinaryDrift"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-AC-01",
+      "domain": "command",
+      "statement": "The embedded v1 command invocation and execution-policy contract is frozen.",
+      "status": "verified",
+      "evidence": [
+        {
+          "kind": "go_test",
+          "path": "cmd/vigil/v1_contract_test.go",
+          "symbol": "TestV1CommandContractGolden"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-AC-02",
+      "domain": "config",
+      "statement": "Configuration schema 3 matches the runtime and preserves fail-closed migration behavior.",
+      "status": "verified",
+      "evidence": [
+        {
+          "kind": "go_test",
+          "path": "internal/contracts/v1_acceptance_test.go",
+          "symbol": "TestPublishedCoreSchemaVersionsMatchRuntime"
+        },
+        {
+          "kind": "schema",
+          "path": "schemas/vigil-config-v3.schema.json"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-AC-03",
+      "domain": "plan",
+      "statement": "Reviewed plan schema 1 and its integrity model are frozen.",
+      "status": "verified",
+      "evidence": [
+        {
+          "kind": "go_test",
+          "path": "internal/plan/plan_test.go",
+          "symbol": "TestPlanV1GoldenCompatibilityFixture"
+        },
+        {
+          "kind": "schema",
+          "path": "schemas/vigil-plan-v1.schema.json"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-AC-04",
+      "domain": "output",
+      "statement": "Machine envelope schema 1, JSONL event schema 1, and golden success and failure payloads are frozen.",
+      "status": "verified",
+      "evidence": [
+        {
+          "kind": "go_test",
+          "path": "internal/output/envelope_test.go",
+          "symbol": "TestEnvelopeV1GoldenCompatibilityFixtures"
+        },
+        {
+          "kind": "go_test",
+          "path": "internal/output/envelope_test.go",
+          "symbol": "TestValidateEnvelopeRejectsInconsistentDuration"
+        },
+        {
+          "kind": "go_test",
+          "path": "internal/contracts/contracts_test.go",
+          "symbol": "TestOutputSchemaMatchesRuntimeExitStatusContract"
+        },
+        {
+          "kind": "go_test",
+          "path": "internal/contracts/contracts_test.go",
+          "symbol": "TestJSONLEventSchemaMatchesRuntimeContract"
+        },
+        {
+          "kind": "schema",
+          "path": "schemas/vigil-output-v1.schema.json"
+        },
+        {
+          "kind": "schema",
+          "path": "schemas/vigil-jsonl-event-v1.schema.json"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-AC-05",
+      "domain": "exit",
+      "statement": "Exit codes 0 through 7 and their statuses are complete and stable.",
+      "status": "verified",
+      "evidence": [
+        {
+          "kind": "go_test",
+          "path": "internal/cli/exits_test.go",
+          "symbol": "TestExitTaxonomyIsCompleteAndStable"
+        },
+        {
+          "kind": "go_test",
+          "path": "internal/contracts/contracts_test.go",
+          "symbol": "TestOutputSchemaMatchesRuntimeExitStatusContract"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-AC-06",
+      "domain": "plugin",
+      "statement": "Plugin protocol, host API, lock, trust, publisher, index, and conformance schema versions match runtime constants.",
+      "status": "verified",
+      "evidence": [
+        {
+          "kind": "go_test",
+          "path": "internal/contracts/contracts_test.go",
+          "symbol": "TestPublishedPluginSchemaVersionsMatchRuntime"
+        },
+        {
+          "kind": "go_test",
+          "path": "internal/plugins/plugins_test.go",
+          "symbol": "TestExternalReferencePluginPassesConformance"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-AC-07",
+      "domain": "deprecation",
+      "statement": "Stable removals require a warning, migration, rollback, and minimum transition window.",
+      "status": "verified",
+      "evidence": [
+        {
+          "kind": "go_test",
+          "path": "internal/contracts/v1_acceptance_test.go",
+          "symbol": "TestDeprecationPolicyRetainsMinimumTransition"
+        },
+        {
+          "kind": "document",
+          "path": "docs/deprecations.md"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-AC-08",
+      "domain": "platform",
+      "statement": "Release lines, platform evidence tiers, and toolchain windows are documented without overclaiming cross-compilation.",
+      "status": "verified",
+      "evidence": [
+        {
+          "kind": "go_test",
+          "path": "internal/contracts/v1_acceptance_test.go",
+          "symbol": "TestV1SupportPolicyDefinesEvidenceTiersAndWindows"
+        },
+        {
+          "kind": "document",
+          "path": "docs/support-policy.md"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-AC-09",
+      "domain": "platform",
+      "statement": "Every platform advertised as v1 supported passes a native downloaded-archive test.",
+      "status": "operational_pending",
+      "blocker": "The configured four-target native matrix must complete against an immutable public release; macOS jobs also require signed artifacts.",
+      "evidence": [
+        {
+          "kind": "workflow",
+          "path": ".github/workflows/release.yml"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-AC-10",
+      "domain": "distribution",
+      "statement": "Unsigned release candidates are deterministic and reproducible from identical source and epoch before platform signing.",
+      "status": "verified",
+      "evidence": [
+        {
+          "kind": "go_test",
+          "path": "internal/releasearchive/archive_test.go",
+          "symbol": "TestWriteIsReproducibleAndNormalizesArchiveMetadata"
+        },
+        {
+          "kind": "script",
+          "path": "scripts/check-release-reproducibility.sh"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-AC-11",
+      "domain": "distribution",
+      "statement": "Published release assets pass checksum, signature, attestation, and post-upload smoke verification.",
+      "status": "operational_pending",
+      "blocker": "The release workflow must run successfully against an immutable public tag and its published assets.",
+      "evidence": [
+        {
+          "kind": "workflow",
+          "path": ".github/workflows/release.yml"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-AC-12",
+      "domain": "installation",
+      "statement": "The project Homebrew tap installs and verifies the stable release.",
+      "status": "operational_pending",
+      "blocker": "The configured tap job must publish and install the formula on clean Intel and Apple Silicon hosts and tie both runs to immutable release evidence.",
+      "evidence": [
+        {
+          "kind": "document",
+          "path": "docs/homebrew-packaging.md"
+        },
+        {
+          "kind": "workflow",
+          "path": ".github/workflows/release.yml"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-AC-13",
+      "domain": "distribution",
+      "statement": "macOS release archives are signed, notarized, stapled where applicable, and verified after download.",
+      "status": "operational_pending",
+      "blocker": "The configured signing/notarization job still requires production Apple credentials and an immutable public run on both native macOS targets.",
+      "evidence": [
+        {
+          "kind": "document",
+          "path": "docs/releasing.md"
+        },
+        {
+          "kind": "script",
+          "path": "scripts/sign-notarize-macos-archive.sh"
+        },
+        {
+          "kind": "workflow",
+          "path": ".github/workflows/release.yml"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-AC-14",
+      "domain": "installation",
+      "statement": "A compiled Vigil binary exposes embedded official packs from an empty directory without a source checkout.",
+      "status": "verified",
+      "evidence": [
+        {
+          "kind": "go_test",
+          "path": "cmd/vigil/blackbox_test.go",
+          "symbol": "TestBuiltBinaryLoadsEmbeddedOfficialPacksOutsideCheckout"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-AC-15",
+      "domain": "workflow",
+      "statement": "Representative repository workflows prove ordering, bounded parallelism, dependency propagation, artifacts, mutation detection, plan integrity, and fail-closed scheduler transitions.",
+      "status": "verified",
+      "evidence": [
+        {
+          "kind": "go_test",
+          "path": "cmd/vigil/main_test.go",
+          "symbol": "TestWorkflowGraphRunsExplicitParallelGroupAndPreservesResultOrder"
+        },
+        {
+          "kind": "go_test",
+          "path": "cmd/vigil/main_test.go",
+          "symbol": "TestWorkflowGraphAppliesCWDEnvironmentAndVerifiesArtifacts"
+        },
+        {
+          "kind": "go_test",
+          "path": "internal/workflow/graph_test.go",
+          "symbol": "TestSchedulerStateTransitionsFailClosedInsteadOfPanicking"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-AC-16",
+      "domain": "review",
+      "statement": "An independent third-party integration validates the plugin and machine-output contracts.",
+      "status": "external_pending",
+      "blocker": "The checked-in external-language fixture is not independent adoption evidence; a third party must publish an integration report.",
+      "evidence": [
+        {
+          "kind": "document",
+          "path": "docs/reviews/external-integration-report.md"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-AC-17",
+      "domain": "governance",
+      "statement": "At least one public RFC completes review and records a compatibility decision.",
+      "status": "external_pending",
+      "blocker": "RFC 0001 is prepared, but it must be opened publicly, remain available for the minimum review period, and record a decision.",
+      "evidence": [
+        {
+          "kind": "document",
+          "path": "docs/rfcs/0001-v1-contract-freeze.md"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-AC-18",
+      "domain": "distribution",
+      "statement": "A multi-custodian production key ceremony publishes reviewed trust roots and a threshold-signed official plugin index.",
+      "status": "operational_pending",
+      "blocker": "Human key custodians, immutable ceremony records, public keys, and the live index endpoint are not yet established.",
+      "evidence": [
+        {
+          "kind": "document",
+          "path": "docs/plugin-publishing.md"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-AC-19",
+      "domain": "review",
+      "statement": "An independent security review covers the v1 threat model, plugin acquisition, execution, and release supply chain.",
+      "status": "external_pending",
+      "blocker": "An independent reviewer must assess the candidate release and all reportable findings must be dispositioned.",
+      "evidence": [
+        {
+          "kind": "document",
+          "path": "docs/reviews/security-review-brief.md"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-AC-20",
+      "domain": "review",
+      "statement": "An independent usability review validates setup, plan review, mutation prompts, failure recovery, and upgrade guidance.",
+      "status": "external_pending",
+      "blocker": "Representative users outside the implementation team must complete the documented scenarios and publish findings.",
+      "evidence": [
+        {
+          "kind": "document",
+          "path": "docs/reviews/usability-review-brief.md"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-AC-21",
+      "domain": "severity",
+      "statement": "No known P0 or P1 correctness, safety, security, usability, or distribution finding remains open.",
+      "status": "external_pending",
+      "blocker": "The independent reviews and live release exercises must complete before the final severity audit can close.",
+      "evidence": [
+        {
+          "kind": "document",
+          "path": "docs/v1-acceptance-matrix.md"
+        }
+      ]
+    },
+    {
+      "id": "VIGIL-AC-22",
+      "domain": "governance",
+      "statement": "Stable v1 release builds fail closed while any required acceptance criterion remains pending.",
+      "status": "verified",
+      "evidence": [
+        {
+          "kind": "go_test",
+          "path": "internal/acceptance/ledger_test.go",
+          "symbol": "TestGateStableV1RequiresEveryCriterionVerified"
+        },
+        {
+          "kind": "go_test",
+          "path": "internal/acceptance/ledger_test.go",
+          "symbol": "TestValidateGateReportRejectsWhitespaceOnlyFieldsAndCountDrift"
+        },
+        {
+          "kind": "script",
+          "path": "scripts/v1-acceptance-check.go"
+        }
+      ]
+    }
+  ]
+}
