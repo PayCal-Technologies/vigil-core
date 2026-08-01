@@ -46,8 +46,9 @@ before any stable v1 claim.
 
 - Stable `v1.0.0` remains blocked until external and operational acceptance
   criteria are independently verified.
-- The GitHub `release` environment still needs a `v*` tag deployment policy and
-  required release secrets before the planned beta tag is pushed.
+- Apple signing/notarization credentials and `RELEASE_ADMIN_READ_TOKEN` still
+  need to be configured in the GitHub `release` environment before the planned
+  beta tag is pushed. Apple setup is intentionally deferred for now.
 - Public Homebrew install instructions should remain disabled until the project
   tap publishes and validates a formula from public release URLs.
 
