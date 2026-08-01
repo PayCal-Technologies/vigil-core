@@ -2,7 +2,7 @@
 
 Please report suspected security issues privately.
 
-Email: security@paycal.com
+Email: info@paycaltech.com
 
 Include:
 
