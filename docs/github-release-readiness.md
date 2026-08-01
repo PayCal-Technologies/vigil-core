@@ -2,6 +2,8 @@
 
 This checklist covers GitHub repository settings that cannot be proven from the
 source tree alone. Complete it before pushing a beta or stable release tag.
+The active `v0.2.0-beta.1` release tracker is
+https://github.com/PayCal-Technologies/vigil-public/issues/2.
 
 ## Verified Repository State
 
