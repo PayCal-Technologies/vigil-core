@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vigil.dev/schemas/vigil-plugin-trust-v1.schema.json",
+  "title": "Vigil local plugin trust store v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "records",
+    "revoked_digests"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "records": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/trust_record"
+      }
+    },
+    "revoked_digests": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/digest"
+      },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "capability": {
+      "enum": [
+        "filesystem:read",
+        "filesystem:write",
+        "git:read",
+        "git:write",
+        "network",
+        "process",
+        "environment",
+        "secrets",
+        "interactive"
+      ]
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "trust_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "digest",
+        "metadata_digest",
+        "capabilities",
+        "acquisition",
+        "index_digest",
+        "publisher_key_ids",
+        "signature_threshold",
+        "approved_at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+        },
+        "digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "metadata_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/capability"
+          },
+          "uniqueItems": true
+        },
+        "acquisition": {
+          "enum": [
+            "local",
+            "signed-index"
+          ]
+        },
+        "index_digest": {
+          "type": "string"
+        },
+        "publisher_key_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/digest"
+          },
+          "uniqueItems": true
+        },
+        "signature_threshold": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "approved_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "acquisition": {
+                "const": "local"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "index_digest": {
+                "const": ""
+              },
+              "publisher_key_ids": {
+                "maxItems": 0
+              },
+              "signature_threshold": {
+                "const": 0
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "index_digest": {
+                "$ref": "#/$defs/digest"
+              },
+              "publisher_key_ids": {
+                "minItems": 1
+              },
+              "signature_threshold": {
+                "minimum": 1
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

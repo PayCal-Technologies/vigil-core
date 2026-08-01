@@ -1,0 +1,475 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vigil.dev/schemas/vigil-plugin-protocol-v1.schema.json",
+  "title": "Vigil plugin handshake protocol v1",
+  "description": "The executable handshake document. Request and response contracts are published in $defs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "protocol_version",
+    "plugin"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "protocol_version": {
+      "const": "1"
+    },
+    "plugin": {
+      "$ref": "#/$defs/metadata"
+    }
+  },
+  "$defs": {
+    "capability": {
+      "enum": [
+        "filesystem:read",
+        "filesystem:write",
+        "git:read",
+        "git:write",
+        "network",
+        "process",
+        "environment",
+        "secrets",
+        "interactive"
+      ]
+    },
+    "command_name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)+$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "positive_duration": {
+      "type": "string",
+      "pattern": "^(?=.*[1-9])(?:[0-9]+(?:ns|us|µs|ms|s|m|h))+$"
+    },
+    "relative_path": {
+      "type": "string",
+      "pattern": "^(?=.*\\S)(?!\\s)(?!/)(?!.*\\s$)(?!.*(?:^|/)\\.\\.?(?:/|$)).+$"
+    },
+    "flag": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "long",
+        "description"
+      ],
+      "properties": {
+        "long": {
+          "type": "string",
+          "pattern": "^--[a-z][a-z0-9-]*$"
+        },
+        "short": {
+          "type": "string",
+          "pattern": "^-[A-Za-z0-9]$"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "file": {
+          "type": "boolean"
+        },
+        "repeatable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "argument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "description"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S+$"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "file": {
+          "type": "boolean"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "repeatable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "aliases",
+        "summary",
+        "access",
+        "capabilities",
+        "args",
+        "flags",
+        "arguments",
+        "stability",
+        "timeout",
+        "network",
+        "required_tools",
+        "output_formats",
+        "interactive",
+        "write_flags",
+        "read_only_flags",
+        "usage",
+        "examples"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/command_name"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/command_name"
+          },
+          "uniqueItems": true
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "access": {
+          "enum": [
+            "read",
+            "write",
+            "conditional-write"
+          ]
+        },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/capability"
+          },
+          "uniqueItems": true
+        },
+        "args": {
+          "type": "string",
+          "minLength": 1
+        },
+        "flags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/flag"
+          }
+        },
+        "arguments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/argument"
+          }
+        },
+        "stability": {
+          "enum": [
+            "experimental",
+            "stable",
+            "deprecated"
+          ]
+        },
+        "timeout": {
+          "$ref": "#/$defs/positive_duration"
+        },
+        "network": {
+          "enum": [
+            "none",
+            "optional",
+            "required"
+          ]
+        },
+        "required_tools": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"
+          },
+          "uniqueItems": true
+        },
+        "output_formats": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "text",
+              "json",
+              "jsonl",
+              "junit",
+              "sarif",
+              "github"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "interactive": {
+          "type": "boolean"
+        },
+        "write_flags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^--[a-z][a-z0-9-]*$"
+          },
+          "uniqueItems": true
+        },
+        "read_only_flags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^--[a-z][a-z0-9-]*$"
+          },
+          "uniqueItems": true
+        },
+        "usage": {
+          "type": "string",
+          "minLength": 1
+        },
+        "examples": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "version",
+        "description",
+        "host_api_version",
+        "commands"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "host_api_version": {
+          "const": "v1"
+        },
+        "commands": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/command"
+          }
+        }
+      }
+    },
+    "request_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository_root",
+        "output_format",
+        "allow_mutation"
+      ],
+      "properties": {
+        "repository_root": {
+          "type": "string",
+          "minLength": 1
+        },
+        "config_path": {
+          "type": "string"
+        },
+        "output_format": {
+          "enum": [
+            "text",
+            "json",
+            "jsonl",
+            "junit",
+            "sarif",
+            "github"
+          ]
+        },
+        "allow_mutation": {
+          "type": "boolean"
+        }
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "protocol_version",
+        "request_id",
+        "command",
+        "args",
+        "context"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1"
+        },
+        "protocol_version": {
+          "const": "1"
+        },
+        "request_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+        },
+        "command": {
+          "$ref": "#/$defs/command_name"
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "context": {
+          "$ref": "#/$defs/request_context"
+        }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^VIGIL_[EW]_[A-Z0-9_]+$"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "path"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "path": {
+          "$ref": "#/$defs/relative_path"
+        },
+        "media_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "protocol_version",
+        "request_id",
+        "exit_code",
+        "output",
+        "data",
+        "warnings",
+        "errors",
+        "artifacts"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1"
+        },
+        "protocol_version": {
+          "const": "1"
+        },
+        "request_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+        },
+        "exit_code": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        },
+        "output": {
+          "type": "string"
+        },
+        "data": true,
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/diagnostic"
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/diagnostic"
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/artifact"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vigil.dev/schemas/vigil-plugin-publishers-v1.schema.json",
+  "title": "Vigil plugin publisher trust store v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "keys",
+    "revoked_key_ids"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "keys": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/publisher_key"
+      }
+    },
+    "revoked_key_ids": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/digest"
+      },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "publisher_key": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key_id",
+        "name",
+        "algorithm",
+        "public_key",
+        "approved_at"
+      ],
+      "properties": {
+        "key_id": {
+          "$ref": "#/$defs/digest"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "algorithm": {
+          "const": "ed25519"
+        },
+        "public_key": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9+/]{43}=$"
+        },
+        "approved_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}
