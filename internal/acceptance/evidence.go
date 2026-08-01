@@ -272,9 +272,7 @@ func operationalCriterionRequiresCompletedWorkflow(criterionID string) bool {
 
 func normalizeEvidenceVersion(value string) (string, error) {
 	value = strings.TrimSpace(value)
-	if strings.HasPrefix(value, "v") {
-		value = strings.TrimPrefix(value, "v")
-	}
+	value = strings.TrimPrefix(value, "v")
 	if value == "" || !semanticVersionPattern.MatchString(value) {
 		return "", fmt.Errorf("invalid evidence candidate version %q", value)
 	}
