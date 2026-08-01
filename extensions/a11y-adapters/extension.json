@@ -1,5 +1,6 @@
 {
   "schema_version": "1",
+  "host_api_version": "v1",
   "id": "a11y-adapters",
   "name": "Accessibility Adapter Extension",
   "kind": "custom",
@@ -21,13 +22,83 @@
     {
       "command": "a11y:inventory",
       "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process"
+      ],
+      "binding": "builtin:a11y:inventory",
+      "timeout": "10m0s",
+      "stability": "stable",
+      "required_tools": [],
+      "network": "none",
+      "output_formats": [
+        "text",
+        "json"
+      ],
       "usage": "vigil a11y:inventory [--json]",
       "description": "List locally available accessibility tools.",
       "install_hint": "npm install -D pa11y lighthouse @playwright/test"
     },
     {
+      "command": "a11y:smoke",
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "network"
+      ],
+      "binding": "builtin:a11y:smoke",
+      "timeout": "10m0s",
+      "stability": "stable",
+      "required_tools": [],
+      "network": "required",
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "usage": "vigil a11y:smoke [--json]",
+      "description": "Run fast accessibility smoke checks with available local tools.",
+      "install_hint": "npm install -D pa11y lighthouse @playwright/test"
+    },
+    {
+      "command": "a11y:ci",
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "network"
+      ],
+      "binding": "builtin:a11y:ci",
+      "timeout": "10m0s",
+      "stability": "stable",
+      "required_tools": [],
+      "network": "required",
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "usage": "vigil a11y:ci [--json]",
+      "description": "Run the configured accessibility adapter set for CI.",
+      "install_hint": "npm install -D pa11y lighthouse @playwright/test"
+    },
+    {
       "command": "a11y:pa11y",
       "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "network"
+      ],
+      "binding": "builtin:a11y:pa11y",
+      "timeout": "10m0s",
+      "stability": "stable",
+      "required_tools": [
+        "pa11y"
+      ],
+      "network": "required",
+      "output_formats": [
+        "text"
+      ],
       "usage": "vigil a11y:pa11y [url]",
       "description": "Run Pa11y against a route.",
       "install_hint": "npm install -D pa11y"
@@ -35,6 +106,21 @@
     {
       "command": "a11y:lighthouse",
       "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "network"
+      ],
+      "binding": "builtin:a11y:lighthouse",
+      "timeout": "10m0s",
+      "stability": "stable",
+      "required_tools": [
+        "lighthouse"
+      ],
+      "network": "required",
+      "output_formats": [
+        "text"
+      ],
       "usage": "vigil a11y:lighthouse [url]",
       "description": "Run Lighthouse accessibility checks.",
       "install_hint": "npm install -D lighthouse"
@@ -42,6 +128,21 @@
     {
       "command": "a11y:playwright",
       "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "network"
+      ],
+      "binding": "builtin:a11y:playwright",
+      "timeout": "10m0s",
+      "stability": "stable",
+      "required_tools": [
+        "npx"
+      ],
+      "network": "optional",
+      "output_formats": [
+        "text"
+      ],
       "usage": "vigil a11y:playwright [args]",
       "description": "Run Playwright accessibility tests.",
       "install_hint": "npm install -D @playwright/test"

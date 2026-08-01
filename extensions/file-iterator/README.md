@@ -13,7 +13,7 @@ domain-specific integration. A real implementation of `files:iterate` would:
 Example command contract:
 
 ```bash
-vigil files:iterate --root=. --glob='**/*.go' --jsonl
+vigil files:iterate --root=. --glob='**/*.go' --format=jsonl
 ```
 
 Example output:

@@ -1,5 +1,6 @@
 {
   "schema_version": "1",
+  "host_api_version": "v1",
   "id": "security-adapters",
   "name": "Security Adapter Extension",
   "kind": "custom",
@@ -16,6 +17,21 @@
     {
       "command": "security:gitleaks",
       "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "git:read"
+      ],
+      "binding": "builtin:security:gitleaks",
+      "timeout": "10m0s",
+      "stability": "stable",
+      "required_tools": [
+        "gitleaks"
+      ],
+      "network": "none",
+      "output_formats": [
+        "text"
+      ],
       "usage": "vigil security:gitleaks [args]",
       "description": "Run local secret scanner.",
       "install_hint": "brew install gitleaks"

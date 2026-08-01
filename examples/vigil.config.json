@@ -1,9 +1,9 @@
 {
-  "schema_version": "2",
+  "schema_version": "3",
   "profile": "go-tool",
   "project": "example-vigil-project",
   "coordination": {
-    "mode": "github-adjacent-helper",
+    "mode": "policy-aware-preflight",
     "authoritative_surfaces": [
       "GitHub",
       "reviewed repository configuration",
@@ -17,7 +17,11 @@
   "gates": [
     {
       "name": "go test",
-      "command": "go test ./...",
+      "command": "go",
+      "args": [
+        "test",
+        "./..."
+      ],
       "read_only": true,
       "tags": [
         "test",
@@ -26,7 +30,11 @@
     },
     {
       "name": "vigil verify",
-      "command": "vigil verify --json",
+      "command": "vigil",
+      "args": [
+        "verify",
+        "--json"
+      ],
       "read_only": true,
       "tags": [
         "vigil",
@@ -47,5 +55,15 @@
     ],
     "disabled_ids": [],
     "require_private": false
+  },
+  "plugins": {
+    "mode": "enabled",
+    "local": "allow",
+    "require_signed": false,
+    "min_signature_threshold": 0,
+    "allowed_ids": [],
+    "denied_ids": [],
+    "allowed_publisher_key_ids": [],
+    "denied_capabilities": []
   }
 }

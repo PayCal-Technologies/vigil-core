@@ -1,5 +1,6 @@
 {
   "schema_version": "1",
+  "host_api_version": "v1",
   "id": "file-iterator",
   "name": "File Iterator Example Extension",
   "kind": "custom",
@@ -11,5 +12,26 @@
   "packages": [],
   "commands": [
     "files:iterate"
+  ],
+  "command_contracts": [
+    {
+      "command": "files:iterate",
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "binding": "builtin:files:iterate",
+      "timeout": "10m0s",
+      "stability": "experimental",
+      "required_tools": [],
+      "network": "none",
+      "output_formats": [
+        "text",
+        "json",
+        "jsonl"
+      ],
+      "usage": "vigil files:iterate [--root path] [--glob pattern] [--json|--jsonl|--format text|json|jsonl]",
+      "description": "Iterate over repository files matching a glob."
+    }
   ]
 }

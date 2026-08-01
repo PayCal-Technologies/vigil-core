@@ -1,5 +1,6 @@
 {
   "schema_version": "1",
+  "host_api_version": "v1",
   "id": "github-cicd",
   "name": "GitHub Actions Helper Extension",
   "kind": "custom",
@@ -16,7 +17,24 @@
     {
       "command": "github:init-ci",
       "access": "conditional-write",
-      "write_flags": ["--write"],
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "git:read",
+        "filesystem:write"
+      ],
+      "binding": "builtin:github:init-ci",
+      "timeout": "10m0s",
+      "stability": "stable",
+      "required_tools": [],
+      "network": "none",
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "write_flags": [
+        "--write"
+      ],
       "usage": "vigil github:init-ci [--write] [--json]",
       "description": "Generate a GitHub Actions workflow from Vigil preflight checks.",
       "examples": [
