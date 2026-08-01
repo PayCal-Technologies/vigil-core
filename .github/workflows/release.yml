@@ -483,7 +483,6 @@ jobs:
 
   homebrew-candidate-test:
     name: Homebrew draft install test (${{ matrix.target }})
-    if: ${{ !contains(github.ref_name, '-') }}
     needs: native-release-smoke
     env:
       HOMEBREW_NO_AUTO_UPDATE: '1'

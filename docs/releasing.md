@@ -54,12 +54,12 @@ Silicon. macOS jobs repeat `codesign` and online Gatekeeper assessment before
 exercising both binaries, the command catalogue, config schema, and all
 embedded official packs from empty user and repository state.
 
-Only after the native matrix passes does Vigil publish a beta candidate in its
-final prerelease state. Stable candidates remain drafts for an additional
-Intel and Apple Silicon Homebrew test: the workflow styles and audits the exact
-formula, rewrites only the matching archive URL in a temporary copy to the
-already verified local draft asset, then installs and tests it. The original
-formula is never changed.
+Only after the native matrix passes does Vigil run the Intel and Apple Silicon
+Homebrew candidate test for both beta and stable releases. That test styles and
+audits the exact formula, rewrites only the matching archive URL in a temporary
+copy to the already verified local draft asset, then installs and tests it. The
+original formula is never changed, and beta releases do not publish the tap or
+advertise a public Homebrew install command.
 
 Vigil first proves through GitHub's repository API that release immutability is
 enabled, then publishes a draft exactly once in its final channel state: beta
@@ -85,11 +85,16 @@ assets intact but keeps the workflow and Homebrew acceptance criterion open.
 
    The release workflow requires Apple signing/notary credentials for both beta
    and stable tags. Stable tags additionally run Homebrew publication checks.
-   Maintainers can verify the beta prerequisites with:
+   Maintainers can verify the beta prerequisites locally with:
 
    ```bash
    scripts/check-github-release-readiness.sh --tag v0.2.0-beta.1
    ```
+
+   Maintainers should also run the manual `Release Readiness` workflow with the
+   target tag and explicit tag-policy acceptance before creating the tag. It
+   uses the protected `release` environment and uploads a JSON readiness
+   artifact without exposing secret values.
 
 4. Run the release builder locally with a candidate version:
 
@@ -109,9 +114,9 @@ assets intact but keeps the workflow and Homebrew acceptance criterion open.
    git push origin v0.2.0-beta.1
    ```
 
-7. Wait for draft verification, native smoke, and final channel publication to
-   complete. For stable tags, also wait for candidate Homebrew validation,
-   public-URL Homebrew validation, and tap publication.
+7. Wait for draft verification, native smoke, Homebrew candidate validation,
+   and final channel publication to complete. For stable tags, also wait for
+   public-URL Homebrew validation and tap publication.
 8. Collect the operational v1 evidence report from the live public release:
 
    ```bash
