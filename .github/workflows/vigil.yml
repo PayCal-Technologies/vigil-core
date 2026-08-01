@@ -5,21 +5,105 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
-  vigil:
-    runs-on: ubuntu-latest
+  quality:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: '1.26.0'
+          go-version: '1.26.5'
           cache: false
-      - name: Install Vigil
+
+      - name: Check formatting
+        shell: bash
+        run: |
+          unformatted="$(gofmt -l .)"
+          test -z "$unformatted" || {
+            printf 'Files require gofmt:\n%s\n' "$unformatted"
+            exit 1
+          }
+
+      - name: Validate workflow and shell syntax
+        if: runner.os == 'Linux'
+        run: |
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.9 .github/workflows/*.yml
+          bash -n scripts/*.sh
+
+      - name: Unit and black-box tests
+        run: go test ./...
+
+      - name: Race detector
+        run: go test -race ./...
+
+      - name: Fuzz parser and boundary smoke
+        if: runner.os == 'Linux'
+        run: scripts/run-fuzz-smoke.sh
+
+      - name: Go vet
+        run: go vet ./...
+
+      - name: Staticcheck
+        if: runner.os == 'Linux'
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...
+
+      - name: Vulnerability analysis
+        if: runner.os == 'Linux'
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+
+      - name: Build local Vigil
         run: |
           mkdir -p bin
-          GOBIN="$PWD/bin" go install github.com/PayCal-Technologies/vigil-public/cmd/vigil@${{ github.sha }}
-          echo "$PWD/bin" >> "$GITHUB_PATH"
+          CGO_ENABLED=0 go build -trimpath -o bin/vigil ./cmd/vigil
+
+      - name: Enforce startup performance budgets
+        run: scripts/check-performance.sh
+
+      - name: External plugin conformance
+        run: |
+          ./bin/vigil \
+            --config examples/vigil.config.json \
+            --allow-mutation \
+            plugins:conformance \
+            --file examples/plugins/reference/vigil-plugin-reference \
+            --execute \
+            --json
+
       - name: Verify Vigil
-        run: vigil verify --json
-      - name: Run Vigil Gates
-        run: vigil workflow:local --json
+        run: ./bin/vigil verify --json
+
+      - name: Run Vigil gates
+        run: ./bin/vigil workflow:local --json
+
+      - name: Rebuild release evidence
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          export RELEASE_TAG=v0.0.0-quality.1
+          export VERSION=0.0.0-quality.1
+          export COMMIT="$GITHUB_SHA"
+          export SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          export ALLOW_UNTAGGED_RELEASE=1
+          scripts/build-release.sh
+          scripts/check-release-reproducibility.sh dist
+          ruby -c dist/vigil.rb
+
+      - name: Clean-directory binary smoke
+        shell: bash
+        run: |
+          empty="$(mktemp -d)"
+          home="$(mktemp -d)"
+          (
+            cd "$empty"
+            HOME="$home" VIGIL_USER_PACK_ROOT="$empty/user-packs" "$GITHUB_WORKSPACE/bin/vigil" extensions:list --json > packs.json
+          )
+          go run ./cmd/vigil-release-archive -h >/dev/null
+          test "$(grep -c '"origin": "embedded-official"' "$empty/packs.json")" -eq 10
