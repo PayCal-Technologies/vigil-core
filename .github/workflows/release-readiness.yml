@@ -1,0 +1,214 @@
+name: Release Readiness
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Semantic version tag to check before creation
+        required: true
+        default: v0.2.0-beta.1
+      accept_tag_policy:
+        description: Confirm the documented release tag policy has been reviewed
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: vigil-release-readiness-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  readiness:
+    name: Check release environment readiness
+    runs-on: ubuntu-latest
+    environment: release
+    env:
+      CANDIDATE_TAG: ${{ inputs.tag }}
+      ACCEPT_TAG_POLICY: ${{ inputs.accept_tag_policy }}
+      TAP_REPOSITORY: PayCal-Technologies/homebrew-tap
+      RELEASE_ADMIN_READ_TOKEN: ${{ secrets.RELEASE_ADMIN_READ_TOKEN }}
+      APPLE_DEVELOPER_ID_CERTIFICATE_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_BASE64 }}
+      APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_NOTARY_PRIVATE_KEY_BASE64: ${{ secrets.APPLE_NOTARY_PRIVATE_KEY_BASE64 }}
+      APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+      APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.26.5'
+          cache: false
+
+      - name: Check release readiness
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p readiness
+          report="readiness/release-readiness-${CANDIDATE_TAG}.json"
+          failures=()
+          warnings=()
+          present_secrets=()
+          missing_secrets=()
+          immutable_releases="unknown"
+          release_environment_policy="unknown"
+
+          add_failure() {
+            failures+=("$1")
+          }
+
+          add_warning() {
+            warnings+=("$1")
+          }
+
+          json_array() {
+            local item
+            for item in "$@"; do
+              printf '%s\n' "$item"
+            done | jq -R . | jq -s .
+          }
+
+          if [[ ! "$CANDIDATE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            add_failure "tag must match vX.Y.Z or vX.Y.Z-prerelease"
+          fi
+
+          if [[ "$ACCEPT_TAG_POLICY" != "true" ]]; then
+            add_failure "workflow input accept_tag_policy must be true"
+          fi
+          if ! grep -Fq "Use annotated semantic-version tags only." docs/github-release-readiness.md; then
+            add_failure "docs/github-release-readiness.md is missing annotated tag policy"
+          fi
+          if ! grep -Fq "semantic-version tags such" docs/github-release-readiness.md; then
+            add_failure "docs/github-release-readiness.md is missing semantic tag examples"
+          fi
+
+          required_secrets=(
+            APPLE_DEVELOPER_ID_CERTIFICATE_BASE64
+            APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD
+            APPLE_SIGNING_IDENTITY
+            APPLE_NOTARY_PRIVATE_KEY_BASE64
+            APPLE_NOTARY_KEY_ID
+            APPLE_NOTARY_ISSUER_ID
+            RELEASE_ADMIN_READ_TOKEN
+          )
+          for secret_name in "${required_secrets[@]}"; do
+            if [[ -n "${!secret_name:-}" ]]; then
+              present_secrets+=("$secret_name")
+            else
+              missing_secrets+=("$secret_name")
+              add_failure "required release secret is empty: $secret_name"
+            fi
+          done
+
+          if [[ -n "${APPLE_DEVELOPER_ID_CERTIFICATE_BASE64:-}" ]]; then
+            if ! printf '%s' "$APPLE_DEVELOPER_ID_CERTIFICATE_BASE64" | base64 -d > "$RUNNER_TEMP/apple-developer-id.p12"; then
+              add_failure "APPLE_DEVELOPER_ID_CERTIFICATE_BASE64 is not valid base64"
+            elif [[ ! -s "$RUNNER_TEMP/apple-developer-id.p12" ]]; then
+              add_failure "APPLE_DEVELOPER_ID_CERTIFICATE_BASE64 decodes to an empty certificate"
+            fi
+          fi
+          if [[ -n "${APPLE_NOTARY_PRIVATE_KEY_BASE64:-}" ]]; then
+            if ! printf '%s' "$APPLE_NOTARY_PRIVATE_KEY_BASE64" | base64 -d > "$RUNNER_TEMP/notary-key.p8"; then
+              add_failure "APPLE_NOTARY_PRIVATE_KEY_BASE64 is not valid base64"
+            elif ! grep -Fq "BEGIN PRIVATE KEY" "$RUNNER_TEMP/notary-key.p8"; then
+              add_failure "APPLE_NOTARY_PRIVATE_KEY_BASE64 does not decode to a private key PEM"
+            fi
+          fi
+          if [[ -n "${APPLE_SIGNING_IDENTITY:-}" && ! "$APPLE_SIGNING_IDENTITY" =~ ^Developer\ ID\ Application:\ .+\ \([A-Z0-9]{10}\)$ ]]; then
+            add_warning "APPLE_SIGNING_IDENTITY does not match the usual Developer ID Application identity shape"
+          fi
+          if [[ -n "${APPLE_NOTARY_KEY_ID:-}" && ! "$APPLE_NOTARY_KEY_ID" =~ ^[A-Z0-9]{10}$ ]]; then
+            add_warning "APPLE_NOTARY_KEY_ID does not look like a 10-character App Store Connect key ID"
+          fi
+          if [[ -n "${APPLE_NOTARY_ISSUER_ID:-}" && ! "$APPLE_NOTARY_ISSUER_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+            add_warning "APPLE_NOTARY_ISSUER_ID does not look like a UUID"
+          fi
+
+          if [[ -n "${RELEASE_ADMIN_READ_TOKEN:-}" ]]; then
+            if immutable="$(GH_TOKEN="$RELEASE_ADMIN_READ_TOKEN" gh api -H 'X-GitHub-Api-Version: 2026-03-10' "repos/${GITHUB_REPOSITORY}/immutable-releases" --jq .enabled 2>/dev/null)"; then
+              immutable_releases="$immutable"
+              if [[ "$immutable" != "true" ]]; then
+                add_failure "GitHub release immutability is not enabled"
+              fi
+            else
+              add_failure "cannot verify GitHub release immutability with RELEASE_ADMIN_READ_TOKEN"
+            fi
+
+            if env_json="$(GH_TOKEN="$RELEASE_ADMIN_READ_TOKEN" gh api "repos/${GITHUB_REPOSITORY}/environments/release" 2>/dev/null)"; then
+              custom_policies="$(jq -r '.deployment_branch_policy.custom_branch_policies // false' <<<"$env_json")"
+              protected_branches="$(jq -r '.deployment_branch_policy.protected_branches // false' <<<"$env_json")"
+              release_environment_policy="custom_branch_policies=${custom_policies};protected_branches=${protected_branches}"
+              if [[ "$custom_policies" != "true" ]]; then
+                add_failure "release environment must use custom branch/tag policies"
+              elif ! policies_json="$(GH_TOKEN="$RELEASE_ADMIN_READ_TOKEN" gh api --paginate "repos/${GITHUB_REPOSITORY}/environments/release/deployment-branch-policies" 2>/dev/null)"; then
+                add_failure "cannot read release environment deployment policies"
+              elif ! jq -e '.branch_policies[]? | select(.type == "tag" and .name == "v*")' <<<"$policies_json" >/dev/null; then
+                add_failure "release environment is missing tag deployment policy v*"
+              fi
+            else
+              add_failure "cannot read release environment with RELEASE_ADMIN_READ_TOKEN"
+            fi
+          fi
+
+          if ! gh repo view "$TAP_REPOSITORY" --json nameWithOwner >/dev/null; then
+            add_failure "Homebrew tap repository is not reachable: $TAP_REPOSITORY"
+          fi
+          if git ls-remote --exit-code --tags "https://github.com/${GITHUB_REPOSITORY}.git" "refs/tags/${CANDIDATE_TAG}" >/dev/null 2>&1; then
+            add_failure "candidate tag already exists on origin: $CANDIDATE_TAG"
+          fi
+
+          bash -n scripts/*.sh
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.9 .github/workflows/*.yml
+
+          if (( ${#failures[@]} == 0 )); then
+            status="pass"
+          else
+            status="fail"
+          fi
+
+          jq -n \
+            --arg schema_version "1" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg tag "$CANDIDATE_TAG" \
+            --arg commit "$GITHUB_SHA" \
+            --arg status "$status" \
+            --arg immutable_releases "$immutable_releases" \
+            --arg release_environment_policy "$release_environment_policy" \
+            --argjson accepted_tag_policy "$ACCEPT_TAG_POLICY" \
+            --argjson present_secret_names "$(json_array "${present_secrets[@]}")" \
+            --argjson missing_secret_names "$(json_array "${missing_secrets[@]}")" \
+            --argjson failures "$(json_array "${failures[@]}")" \
+            --argjson warnings "$(json_array "${warnings[@]}")" \
+            '{
+              schema_version: $schema_version,
+              repository: $repository,
+              tag: $tag,
+              commit: $commit,
+              status: $status,
+              immutable_releases: $immutable_releases,
+              release_environment_policy: $release_environment_policy,
+              accepted_tag_policy: $accepted_tag_policy,
+              present_secret_names: $present_secret_names,
+              missing_secret_names: $missing_secret_names,
+              failures: $failures,
+              warnings: $warnings
+            }' > "$report"
+
+          jq . "$report"
+          test "$status" = "pass"
+
+      - name: Upload readiness report
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: release-readiness-${{ inputs.tag }}
+          path: readiness/*.json
+          retention-days: 30
