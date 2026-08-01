@@ -66,38 +66,50 @@ assets intact but keeps the workflow and Homebrew acceptance criterion open.
 ## Release Checklist
 
 1. Ensure the permanent quality workflow is green.
-2. Update release notes and migration documentation.
-3. Run the release builder locally with a candidate version:
+2. Update `CHANGELOG.md`, release notes, and migration documentation.
+3. Confirm release repository settings and credentials:
+
+   - GitHub release immutability is enabled;
+   - the reviewer-protected `release` environment exists;
+   - Apple Developer ID and App Store Connect notary secrets are configured;
+   - `RELEASE_ADMIN_READ_TOKEN` can read repository Administration settings;
+   - stable releases only: `HOMEBREW_TAP_TOKEN` can update
+     `PayCal-Technologies/homebrew-tap`.
+
+   The release workflow requires Apple signing/notary credentials for both beta
+   and stable tags. Stable tags additionally run Homebrew publication checks.
+
+4. Run the release builder locally with a candidate version:
 
    ```bash
-   RELEASE_TAG=v0.2.0 scripts/build-release.sh
+   RELEASE_TAG=v0.2.0-beta.1 scripts/build-release.sh
    ```
 
-4. Confirm every unsigned candidate file is reproducible:
+5. Confirm every unsigned candidate file is reproducible:
 
    ```bash
-   RELEASE_TAG=v0.2.0 scripts/check-release-reproducibility.sh dist
+   RELEASE_TAG=v0.2.0-beta.1 scripts/check-release-reproducibility.sh dist
    ```
-5. Create and push an annotated semantic-version tag:
+6. Create and push an annotated semantic-version tag:
 
    ```bash
-   git tag -a v0.2.0 -m "v0.2.0"
-   git push origin v0.2.0
+   git tag -a v0.2.0-beta.1 -m "v0.2.0-beta.1"
+   git push origin v0.2.0-beta.1
    ```
 
-6. Wait for draft verification, native smoke, candidate Homebrew validation,
-   final channel publication, public-URL Homebrew validation, and tap
-   publication to complete.
-7. Collect the operational v1 evidence report from the live public release:
+7. Wait for draft verification, native smoke, and final channel publication to
+   complete. For stable tags, also wait for candidate Homebrew validation,
+   public-URL Homebrew validation, and tap publication.
+8. Collect the operational v1 evidence report from the live public release:
 
    ```bash
    go run ./scripts/collect-v1-operational-evidence.go \
      --repo PayCal-Technologies/vigil-public \
-     --tag v0.2.0 \
+     --tag v0.2.0-beta.1 \
      --tap-repo PayCal-Technologies/homebrew-tap \
      --workflow-run-id "$GITHUB_RUN_ID" \
      --require-release-proof \
-     --output docs/reviews/v1-operational-evidence-v0.2.0.json
+     --output docs/reviews/v1-operational-evidence-v0.2.0-beta.1.json
    ```
 
    Add `--plugin-index`, `--plugin-ceremony-url`, and repeated
@@ -105,16 +117,16 @@ assets intact but keeps the workflow and Homebrew acceptance criterion open.
    `--require-plugin-index-proof` only when the ceremony and live index are
    expected to close VIGIL-AC-18.
 
-8. Verify one downloaded artifact independently:
+9. Verify one downloaded artifact independently:
 
    ```bash
    sha256sum -c SHA256SUMS
-   gh attestation verify vigil_0.2.0_linux_amd64.tar.gz \
+   gh attestation verify vigil_0.2.0-beta.1_linux_amd64.tar.gz \
      --repo PayCal-Technologies/vigil-public
    cosign verify-blob SHA256SUMS \
      --bundle SHA256SUMS.sigstore.json \
      --certificate-identity \
-       https://github.com/PayCal-Technologies/vigil-public/.github/workflows/release.yml@refs/tags/v0.2.0 \
+       https://github.com/PayCal-Technologies/vigil-public/.github/workflows/release.yml@refs/tags/v0.2.0-beta.1 \
      --certificate-oidc-issuer https://token.actions.githubusercontent.com
    ```
 

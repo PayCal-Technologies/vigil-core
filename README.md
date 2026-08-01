@@ -1,5 +1,10 @@
 # Vigil
 
+[![Vigil](https://github.com/PayCal-Technologies/vigil-public/actions/workflows/vigil.yml/badge.svg)](https://github.com/PayCal-Technologies/vigil-public/actions/workflows/vigil.yml)
+[![Release](https://github.com/PayCal-Technologies/vigil-public/actions/workflows/release.yml/badge.svg)](https://github.com/PayCal-Technologies/vigil-public/actions/workflows/release.yml)
+[![GitHub release](https://img.shields.io/github/v/release/PayCal-Technologies/vigil-public?include_prereleases)](https://github.com/PayCal-Technologies/vigil-public/releases)
+[![License: 0BSD](https://img.shields.io/badge/license-0BSD-blue.svg)](LICENSE)
+
 Vigil is a policy-aware repository preflight engine. It lets humans and coding
 agents inspect, approve, run, and verify automation before that automation
 changes a project.
@@ -67,8 +72,35 @@ created. Each archive includes `README.md`, `LICENSE`, the manpage, and Bash,
 Zsh, and Fish completions, plus the public configuration, output, pack, plan,
 plugin protocol, index, publisher, lock, and trust schemas.
 Releases also include checksums, an SPDX SBOM, a Sigstore bundle, and GitHub
-build-provenance attestations. Stable releases install-test and publish the
-matching formula to the project Homebrew tap.
+build-provenance attestations.
+
+Homebrew packaging is release-ready but not advertised as an install command
+until the project tap has a public, tested formula. Stable release automation
+install-tests the generated formula before and after publication, then publishes
+the matching formula to the project tap when `HOMEBREW_TAP_TOKEN` is configured.
+
+## Release Status
+
+`v0.1.0` is the current public source tag. The next intended public candidate is
+`v0.2.0-beta.1`, which exercises the signed archive, checksum, SBOM, Sigstore,
+attestation, native-smoke, and prerelease publication path.
+
+`v1.0.0` is intentionally blocked until the external and operational acceptance
+ledger is complete. The stable v1 release gate fails closed and emits
+`v1-acceptance-gate.json` listing the remaining evidence.
+
+To verify a downloaded release:
+
+```bash
+shasum -a 256 -c SHA256SUMS
+gh attestation verify vigil_0.2.0-beta.1_linux_amd64.tar.gz \
+  --repo PayCal-Technologies/vigil-public
+cosign verify-blob SHA256SUMS \
+  --bundle SHA256SUMS.sigstore.json \
+  --certificate-identity \
+    https://github.com/PayCal-Technologies/vigil-public/.github/workflows/release.yml@refs/tags/v0.2.0-beta.1 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
 
 ## Quick Start
 
@@ -419,6 +451,7 @@ and the checked-in [schemas](schemas/README.md).
 - [Deprecation policy](docs/deprecations.md)
 - [Release process](docs/releasing.md)
 - [Release channels](docs/release-channels.md)
+- [Changelog](CHANGELOG.md)
 
 Security reports must follow [SECURITY.md](SECURITY.md).
 

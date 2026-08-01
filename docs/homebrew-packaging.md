@@ -62,6 +62,11 @@ Homebrew/core is appropriate only after Vigil has clear public utility, stable
 versioned releases, and user-visible adoption. Until then, use a project tap or
 recommend `go install`.
 
+The public README should not advertise `brew install` until the project tap has
+a formula produced from public release assets and verified by the stable release
+workflow. Before that point, Homebrew support is considered packaging-ready,
+not user-install-ready.
+
 Expected path:
 
 1. Publish signed or clearly versioned GitHub releases.
