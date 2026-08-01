@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 type Mode string
@@ -209,7 +210,7 @@ func (b *boundedBuffer) Write(data []byte) (int, error) {
 func (b *boundedBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	output := b.buffer.String()
+	output := safeCapturedText(b.buffer.Bytes(), b.truncated)
 	if b.truncated {
 		if output != "" && !strings.HasSuffix(output, "\n") {
 			output += "\n"
@@ -223,4 +224,17 @@ func (b *boundedBuffer) Truncated() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.truncated
+}
+
+func safeCapturedText(data []byte, truncated bool) string {
+	if truncated {
+		for len(data) > 0 {
+			r, size := utf8.DecodeLastRune(data)
+			if r != utf8.RuneError || size != 1 {
+				break
+			}
+			data = data[:len(data)-1]
+		}
+	}
+	return strings.ToValidUTF8(string(data), "\uFFFD")
 }

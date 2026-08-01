@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestRunCanClearEnvironmentAndProvideStdin(t *testing.T) {
@@ -165,6 +166,26 @@ func TestRunTruncatesCapturedOutput(t *testing.T) {
 	})
 	if result.State != StateOK || result.Output != "1234\n[truncated]" || !result.Truncated {
 		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestRunTruncatedCapturedOutputKeepsValidUTF8(t *testing.T) {
+	result := Run(context.Background(), Spec{
+		Name:         "truncate-utf8",
+		Mode:         ModeArgv,
+		Executable:   "printf",
+		Args:         []string{"abc€def"},
+		CaptureLimit: 5,
+		Timeout:      time.Second,
+	})
+	if result.State != StateOK || !result.Truncated {
+		t.Fatalf("result=%+v", result)
+	}
+	if !utf8.ValidString(result.Output) {
+		t.Fatalf("output is invalid UTF-8: %q", result.Output)
+	}
+	if result.Output != "abc\n[truncated]" {
+		t.Fatalf("output = %q", result.Output)
 	}
 }
 
