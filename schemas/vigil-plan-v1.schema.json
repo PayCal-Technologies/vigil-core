@@ -1,0 +1,254 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vigil.dev/schemas/vigil-plan-v1.schema.json",
+  "title": "Vigil reviewed execution plan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "plan_id",
+    "command",
+    "created_at",
+    "inputs",
+    "options",
+    "gates"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "plan_id": {
+      "$ref": "#/$defs/digest"
+    },
+    "command": {
+      "const": "workflow:local"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "inputs": {
+      "$ref": "#/$defs/inputs"
+    },
+    "options": {
+      "$ref": "#/$defs/options"
+    },
+    "gates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/gate"
+      }
+    }
+  },
+  "$defs": {
+    "positive_duration": {
+      "type": "string",
+      "pattern": "^(?=.*[1-9])(?:[0-9]+(?:ns|us|µs|ms|s|m|h))+$"
+    },
+    "non_negative_duration": {
+      "type": "string",
+      "pattern": "^(?:[0-9]+(?:ns|us|µs|ms|s|m|h))+$"
+    },
+    "relative_path": {
+      "type": "string",
+      "pattern": "^(?=.*\\S)(?!\\s)(?!/)(?!.*\\s$)(?!.*(?:^|/)\\.\\.?(?:/|$)).+$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "binary_digest",
+        "config_path",
+        "config_digest",
+        "repository_root",
+        "repository_head",
+        "workspace_digest",
+        "command_registry_digest",
+        "pack_digest"
+      ],
+      "properties": {
+        "binary_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "config_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "config_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "repository_root": {
+          "type": "string",
+          "minLength": 1
+        },
+        "repository_head": {
+          "type": "string",
+          "minLength": 1
+        },
+        "workspace_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "command_registry_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "pack_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "options": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "default_timeout"
+      ],
+      "properties": {
+        "tag_filter": {
+          "type": "string"
+        },
+        "default_timeout": {
+          "$ref": "#/$defs/positive_duration"
+        },
+        "max_parallel": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32
+        }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "command",
+        "read_only"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "command": {
+          "type": "string",
+          "minLength": 1
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "shell": {
+          "type": "boolean"
+        },
+        "read_only": {
+          "type": "boolean"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "parallel_group": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "continue_on_error": {
+          "type": "boolean"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "retry": {
+          "$ref": "#/$defs/retry"
+        },
+        "timeout": {
+          "$ref": "#/$defs/positive_duration"
+        },
+        "cwd": {
+          "$ref": "#/$defs/relative_path"
+        },
+        "environment": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/artifact"
+          }
+        }
+      }
+    },
+    "retry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_attempts"
+      ],
+      "properties": {
+        "max_attempts": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 5
+        },
+        "delay": {
+          "$ref": "#/$defs/non_negative_duration"
+        },
+        "on": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "failed",
+              "timed_out"
+            ]
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relative_path"
+        },
+        "kind": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9._-]*$"
+        },
+        "media_type": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

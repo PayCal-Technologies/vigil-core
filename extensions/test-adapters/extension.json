@@ -1,5 +1,6 @@
 {
   "schema_version": "1",
+  "host_api_version": "v1",
   "id": "test-adapters",
   "name": "Test Adapter Extension",
   "kind": "custom",
@@ -12,5 +13,45 @@
   "commands": [
     "tests:history",
     "tests:affected"
+  ],
+  "command_contracts": [
+    {
+      "command": "tests:history",
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "binding": "builtin:tests:history",
+      "timeout": "10m0s",
+      "stability": "stable",
+      "required_tools": [],
+      "network": "none",
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "usage": "vigil tests:history [--json]",
+      "description": "Summarize JUnit test history."
+    },
+    {
+      "command": "tests:affected",
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "git:read"
+      ],
+      "binding": "builtin:tests:affected",
+      "timeout": "10m0s",
+      "stability": "stable",
+      "required_tools": [],
+      "network": "none",
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "usage": "vigil tests:affected [--json]",
+      "description": "List likely tests for changed files."
+    }
   ]
 }

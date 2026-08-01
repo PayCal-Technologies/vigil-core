@@ -1,0 +1,208 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vigil.dev/schemas/vigil-plugin-index-v1.schema.json",
+  "title": "Vigil signed plugin index v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "signed",
+    "signatures"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "signed": {
+      "$ref": "#/$defs/signed_payload"
+    },
+    "signatures": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/signature"
+      }
+    }
+  },
+  "$defs": {
+    "capability": {
+      "enum": [
+        "filesystem:read",
+        "filesystem:write",
+        "git:read",
+        "git:write",
+        "network",
+        "process",
+        "environment",
+        "secrets",
+        "interactive"
+      ]
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "https_url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://[^/?@#]+(?:[/?][^#]*)?$"
+    },
+    "artifact_url": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/https_url"
+        },
+        {
+          "type": "string",
+          "pattern": "^(?![A-Za-z][A-Za-z0-9+.-]*:)(?!/)(?!\\.?$)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*[?#:%\\\\]).+$"
+        }
+      ]
+    },
+    "signed_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "generated_at",
+        "expires_at",
+        "signature_threshold",
+        "plugins"
+      ],
+      "properties": {
+        "generated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "signature_threshold": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "plugins": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/release"
+          }
+        }
+      }
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "version",
+        "description",
+        "protocol_version",
+        "host_api_version",
+        "metadata_digest",
+        "capabilities",
+        "artifacts"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "protocol_version": {
+          "const": "1"
+        },
+        "host_api_version": {
+          "const": "v1"
+        },
+        "metadata_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/capability"
+          },
+          "uniqueItems": true
+        },
+        "artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/artifact"
+          }
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "arch",
+        "url",
+        "digest",
+        "size"
+      ],
+      "properties": {
+        "os": {
+          "enum": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "arch": {
+          "enum": [
+            "amd64",
+            "arm64"
+          ]
+        },
+        "url": {
+          "$ref": "#/$defs/artifact_url"
+        },
+        "digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 268435456
+        }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key_id",
+        "algorithm",
+        "signature"
+      ],
+      "properties": {
+        "key_id": {
+          "$ref": "#/$defs/digest"
+        },
+        "algorithm": {
+          "const": "ed25519"
+        },
+        "signature": {
+          "type": "string",
+          "minLength": 88,
+          "maxLength": 88,
+          "pattern": "^[A-Za-z0-9+/]{86}==$"
+        }
+      }
+    }
+  }
+}

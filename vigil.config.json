@@ -1,9 +1,9 @@
 {
-  "schema_version": "2",
+  "schema_version": "3",
   "profile": "go-tool",
   "project": "vigil-public",
   "coordination": {
-    "mode": "github-adjacent-helper",
+    "mode": "policy-aware-preflight",
     "authoritative_surfaces": [
       "GitHub",
       "reviewed repository configuration",
@@ -17,7 +17,11 @@
   "gates": [
     {
       "name": "go test",
-      "command": "go test ./...",
+      "command": "go",
+      "args": [
+        "test",
+        "./..."
+      ],
       "read_only": true,
       "tags": [
         "test",
@@ -26,7 +30,11 @@
     },
     {
       "name": "command catalog",
-      "command": "./bin/vigil checks:command-catalog --json",
+      "command": "./bin/vigil",
+      "args": [
+        "checks:command-catalog",
+        "--json"
+      ],
       "read_only": true,
       "tags": [
         "diagnostic",
@@ -36,7 +44,11 @@
     },
     {
       "name": "extension manifests",
-      "command": "./bin/vigil extensions:doctor --json",
+      "command": "./bin/vigil",
+      "args": [
+        "extensions:doctor",
+        "--json"
+      ],
       "read_only": true,
       "tags": [
         "extension",
@@ -46,7 +58,11 @@
     },
     {
       "name": "public assumptions",
-      "command": "./bin/vigil checks:public-assumptions --json",
+      "command": "./bin/vigil",
+      "args": [
+        "checks:public-assumptions",
+        "--json"
+      ],
       "read_only": true,
       "tags": [
         "public",
@@ -63,11 +79,23 @@
     ],
     "require_private": false
   },
+  "plugins": {
+    "mode": "enabled",
+    "local": "deny",
+    "require_signed": true,
+    "min_signature_threshold": 2,
+    "allowed_ids": [],
+    "denied_ids": [],
+    "allowed_publisher_key_ids": [],
+    "denied_capabilities": [
+      "secrets"
+    ]
+  },
   "public_assumption_patterns": [
     "/[A-Za-z0-9._-]+/var/www/[A-Za-z0-9._-]+",
     "/Users/[A-Za-z0-9._-]+/",
-    "(?i)[A-Za-z0-9._-]+-private",
-    "(?i)private-[A-Za-z0-9._-]+",
+    "(?i)[A-Za-z0-9._]+-private([^A-Za-z0-9._-]|$)",
+    "(?i)private-(repo|repository|deploy|deployment|infra|infrastructure|internal|customer)[A-Za-z0-9._-]*",
     "(?i)company-internal",
     "(?i)customer-specific"
   ]

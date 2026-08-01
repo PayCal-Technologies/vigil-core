@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vigil.dev/schemas/vigil-external-evidence-validation-v1.schema.json",
+  "title": "Vigil v1 external evidence validation report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "target",
+    "report",
+    "status",
+    "verified_criteria",
+    "open_p0_p1_findings",
+    "errors"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "target": {
+      "const": "v1.0"
+    },
+    "report": {
+      "type": "string"
+    },
+    "criterion": {
+      "$ref": "#/$defs/external_criterion_id"
+    },
+    "status": {
+      "enum": [
+        "valid",
+        "invalid"
+      ]
+    },
+    "candidate_commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "candidate_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "public_url": {
+      "$ref": "#/$defs/https_url"
+    },
+    "verified_criteria": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/external_criterion_id"
+      },
+      "uniqueItems": true
+    },
+    "open_p0_p1_findings": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^VIGIL-F-[0-9]{3}$"
+      },
+      "uniqueItems": true
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "\\S"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "valid"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "report": {
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "errors": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "invalid"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "errors": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "external_criterion_id": {
+      "enum": [
+        "VIGIL-AC-16",
+        "VIGIL-AC-17",
+        "VIGIL-AC-19",
+        "VIGIL-AC-20",
+        "VIGIL-AC-21"
+      ]
+    },
+    "https_url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://[^/?@#]+(?:[/?][^#]*)?$"
+    }
+  }
+}

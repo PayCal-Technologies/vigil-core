@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vigil.dev/schemas/vigil-plugin-conformance-v1.schema.json",
+  "title": "Vigil plugin conformance report v1",
+  "description": "The report emitted in the common output envelope data by plugins:conformance.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "candidate",
+    "execute_commands",
+    "checks",
+    "issues"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "fail"
+      ]
+    },
+    "candidate": {
+      "type": "string",
+      "minLength": 1
+    },
+    "executable_digest": {
+      "$ref": "vigil-plugin-protocol-v1.schema.json#/$defs/digest"
+    },
+    "metadata_digest": {
+      "$ref": "vigil-plugin-protocol-v1.schema.json#/$defs/digest"
+    },
+    "plugin": {
+      "$ref": "vigil-plugin-protocol-v1.schema.json#/$defs/metadata"
+    },
+    "execute_commands": {
+      "type": "boolean"
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "status",
+          "code",
+          "detail"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "command": {
+            "$ref": "vigil-plugin-protocol-v1.schema.json#/$defs/command_name"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "fail"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^VIGIL_PLUGIN_CONFORMANCE_[A-Z0-9_]+$"
+          },
+          "detail": {
+            "type": "string",
+            "minLength": 1
+          },
+          "response_exit_code": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 7
+          }
+        }
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "exit_code"
+        ],
+        "properties": {
+          "plugin_id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^VIGIL_PLUGIN_CONFORMANCE_[A-Z0-9_]+$"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "exit_code": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 7
+          }
+        }
+      }
+    }
+  }
+}

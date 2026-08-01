@@ -1,5 +1,6 @@
 {
   "schema_version": "1",
+  "host_api_version": "v1",
   "id": "deploy-verify",
   "name": "Deploy Verify Extension",
   "kind": "custom",
@@ -11,5 +12,30 @@
   "packages": [],
   "commands": [
     "deploy:verify"
+  ],
+  "command_contracts": [
+    {
+      "command": "deploy:verify",
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "network"
+      ],
+      "binding": "builtin:deploy:verify",
+      "timeout": "10m0s",
+      "stability": "stable",
+      "required_tools": [
+        "curl"
+      ],
+      "network": "required",
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "usage": "vigil deploy:verify [--url URL] [--json]",
+      "description": "Verify a configured public endpoint.",
+      "install_hint": "install curl"
+    }
   ]
 }

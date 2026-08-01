@@ -1,5 +1,7 @@
 bin/
 dist/
 tmp/
+.vigil/
+.code-review-graph/
 .DS_Store
 *.log

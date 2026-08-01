@@ -1,0 +1,3165 @@
+{
+  "schema_version": "1",
+  "commands": [
+    {
+      "name": "a11y:ci",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "network"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "pack:a11y-adapters",
+      "pack": "a11y-adapters",
+      "binding": "builtin:a11y:ci",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "10m0s",
+      "network": "required",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil a11y:ci [--json]",
+      "auto_enabled": false
+    },
+    {
+      "name": "a11y:inventory",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "pack:a11y-adapters",
+      "pack": "a11y-adapters",
+      "binding": "builtin:a11y:inventory",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "10m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil a11y:inventory [--json]",
+      "auto_enabled": false
+    },
+    {
+      "name": "a11y:lighthouse",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "network"
+      ],
+      "args": "[args]",
+      "flags": [],
+      "arguments": [],
+      "source": "pack:a11y-adapters",
+      "pack": "a11y-adapters",
+      "binding": "builtin:a11y:lighthouse",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "10m0s",
+      "network": "required",
+      "required_tools": [
+        "lighthouse"
+      ],
+      "output_formats": [
+        "text"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil a11y:lighthouse [url]",
+      "auto_enabled": false
+    },
+    {
+      "name": "a11y:pa11y",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "network"
+      ],
+      "args": "[args]",
+      "flags": [],
+      "arguments": [],
+      "source": "pack:a11y-adapters",
+      "pack": "a11y-adapters",
+      "binding": "builtin:a11y:pa11y",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "10m0s",
+      "network": "required",
+      "required_tools": [
+        "pa11y"
+      ],
+      "output_formats": [
+        "text"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil a11y:pa11y [url]",
+      "auto_enabled": false
+    },
+    {
+      "name": "a11y:playwright",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "network"
+      ],
+      "args": "[args]",
+      "flags": [],
+      "arguments": [],
+      "source": "pack:a11y-adapters",
+      "pack": "a11y-adapters",
+      "binding": "builtin:a11y:playwright",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "10m0s",
+      "network": "optional",
+      "required_tools": [
+        "npx"
+      ],
+      "output_formats": [
+        "text"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil a11y:playwright [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "a11y:smoke",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "network"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "pack:a11y-adapters",
+      "pack": "a11y-adapters",
+      "binding": "builtin:a11y:smoke",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "10m0s",
+      "network": "required",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil a11y:smoke [--json]",
+      "auto_enabled": false
+    },
+    {
+      "name": "apply",
+      "aliases": [],
+      "access": "write",
+      "capabilities": [
+        "filesystem:read",
+        "filesystem:write",
+        "git:read",
+        "git:write",
+        "network",
+        "process",
+        "environment",
+        "secrets"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--format",
+          "value_name": "FORMAT",
+          "values": [
+            "text",
+            "json",
+            "jsonl",
+            "junit",
+            "github"
+          ]
+        },
+        {
+          "long": "--artifacts"
+        },
+        {
+          "long": "--artifacts-dir",
+          "value_name": "PATH",
+          "file": true
+        }
+      ],
+      "arguments": [
+        {
+          "name": "PLAN_FILE",
+          "file": true,
+          "required": true
+        }
+      ],
+      "source": "core",
+      "binding": "builtin:apply",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "30m0s",
+      "network": "optional",
+      "required_tools": [
+        "git"
+      ],
+      "output_formats": [
+        "text",
+        "json",
+        "jsonl",
+        "junit",
+        "github"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil apply [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "checks:command-catalog",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:checks:command-catalog",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil checks:command-catalog [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "checks:dependency-security",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "git:read",
+        "network"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "pack:dependency-adapters",
+      "pack": "dependency-adapters",
+      "binding": "builtin:checks:dependency-security",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "10m0s",
+      "network": "optional",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil checks:dependency-security [--json]",
+      "auto_enabled": false
+    },
+    {
+      "name": "checks:public-assumptions",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "git:read",
+        "process"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--format",
+          "value_name": "FORMAT",
+          "values": [
+            "text",
+            "json",
+            "jsonl",
+            "junit",
+            "sarif",
+            "github"
+          ]
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:checks:public-assumptions",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json",
+        "jsonl",
+        "junit",
+        "sarif",
+        "github"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil checks:public-assumptions [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "checks:public-parity",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "git:read",
+        "process"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--format",
+          "value_name": "FORMAT",
+          "values": [
+            "text",
+            "json",
+            "jsonl",
+            "junit",
+            "sarif",
+            "github"
+          ]
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:checks:public-parity",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json",
+        "jsonl",
+        "junit",
+        "sarif",
+        "github"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil checks:public-parity [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "checks:release-policy",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "git:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "pack:release-policy",
+      "pack": "release-policy",
+      "binding": "builtin:checks:release-policy",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "10m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil checks:release-policy [--json]",
+      "auto_enabled": false
+    },
+    {
+      "name": "checks:staged-sensitive",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "git:read",
+        "process"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--format",
+          "value_name": "FORMAT",
+          "values": [
+            "text",
+            "json",
+            "jsonl",
+            "junit",
+            "sarif",
+            "github"
+          ]
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:checks:staged-sensitive",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json",
+        "jsonl",
+        "junit",
+        "sarif",
+        "github"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil checks:staged-sensitive [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "checks:tracked-assistant-artifacts",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "git:read",
+        "process"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--format",
+          "value_name": "FORMAT",
+          "values": [
+            "text",
+            "json",
+            "jsonl",
+            "junit",
+            "sarif",
+            "github"
+          ]
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:checks:tracked-assistant-artifacts",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json",
+        "jsonl",
+        "junit",
+        "sarif",
+        "github"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil checks:tracked-assistant-artifacts [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "checks:workspace-hygiene",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "git:read",
+        "process"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--format",
+          "value_name": "FORMAT",
+          "values": [
+            "text",
+            "json",
+            "jsonl",
+            "junit",
+            "sarif",
+            "github"
+          ]
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:checks:workspace-hygiene",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json",
+        "jsonl",
+        "junit",
+        "sarif",
+        "github"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil checks:workspace-hygiene [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "completion",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [],
+      "arguments": [
+        {
+          "name": "SHELL",
+          "values": [
+            "bash",
+            "zsh",
+            "fish"
+          ],
+          "required": true
+        }
+      ],
+      "source": "core",
+      "binding": "builtin:completion",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "shell"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil completion [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "composer:validate",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process"
+      ],
+      "args": "[args]",
+      "flags": [],
+      "arguments": [],
+      "source": "pack:dependency-adapters",
+      "pack": "dependency-adapters",
+      "binding": "builtin:composer:validate",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "10m0s",
+      "network": "none",
+      "required_tools": [
+        "composer"
+      ],
+      "output_formats": [
+        "text"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil composer:validate [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "config:init",
+      "aliases": [],
+      "access": "conditional-write",
+      "capabilities": [
+        "filesystem:read",
+        "filesystem:write"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--profile",
+          "value_name": "PROFILE",
+          "values": [
+            "generic",
+            "go-tool",
+            "static-site",
+            "js-app",
+            "php-app",
+            "native-app",
+            "mixed",
+            "custom"
+          ]
+        },
+        {
+          "long": "--write"
+        },
+        {
+          "long": "--force"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:config:init",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [
+        "--write",
+        "--force"
+      ],
+      "read_only_flags": [],
+      "usage": "vigil config:init [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "config:migrate",
+      "aliases": [],
+      "access": "conditional-write",
+      "capabilities": [
+        "filesystem:read",
+        "filesystem:write"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--write"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:config:migrate",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [
+        "--write"
+      ],
+      "read_only_flags": [],
+      "usage": "vigil config:migrate [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "config:repair",
+      "aliases": [],
+      "access": "write",
+      "capabilities": [
+        "filesystem:read",
+        "filesystem:write",
+        "interactive"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--yes"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:config:repair",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": true,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil config:repair [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "config:report",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:config:report",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil config:report [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "config:schema",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:config:schema",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil config:schema [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "config:template",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--profile",
+          "value_name": "PROFILE",
+          "values": [
+            "generic",
+            "go-tool",
+            "static-site",
+            "js-app",
+            "php-app",
+            "native-app",
+            "mixed",
+            "custom"
+          ]
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:config:template",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil config:template [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "config:validate",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:config:validate",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil config:validate [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "deploy:verify",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "network"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--url",
+          "value_name": "URL"
+        }
+      ],
+      "arguments": [],
+      "source": "pack:deploy-verify",
+      "pack": "deploy-verify",
+      "binding": "builtin:deploy:verify",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "10m0s",
+      "network": "required",
+      "required_tools": [
+        "curl"
+      ],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil deploy:verify [--url URL] [--json]",
+      "auto_enabled": false
+    },
+    {
+      "name": "deps:inventory",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:deps:inventory",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil deps:inventory [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "deps:why",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "network"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [
+        {
+          "name": "PACKAGE",
+          "required": true
+        }
+      ],
+      "source": "pack:dependency-adapters",
+      "pack": "dependency-adapters",
+      "binding": "builtin:deps:why",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "10m0s",
+      "network": "optional",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil deps:why [--json] \u003cpackage\u003e",
+      "auto_enabled": false
+    },
+    {
+      "name": "doctor",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "git:read",
+        "process"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--format",
+          "value_name": "FORMAT",
+          "values": [
+            "text",
+            "json",
+            "jsonl",
+            "junit",
+            "github"
+          ]
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:doctor",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json",
+        "jsonl",
+        "junit",
+        "github"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil doctor [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "explain",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [
+        {
+          "name": "COMMAND",
+          "required": true
+        }
+      ],
+      "source": "core",
+      "binding": "builtin:explain",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil explain [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "extensions:doctor",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:extensions:doctor",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil extensions:doctor [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "extensions:list",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:extensions:list",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil extensions:list [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "files:iterate",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--format",
+          "value_name": "FORMAT",
+          "values": [
+            "text",
+            "json",
+            "jsonl"
+          ]
+        },
+        {
+          "long": "--root",
+          "value_name": "PATH",
+          "file": true
+        },
+        {
+          "long": "--glob",
+          "value_name": "PATTERN"
+        },
+        {
+          "long": "--jsonl"
+        }
+      ],
+      "arguments": [],
+      "source": "pack:file-iterator",
+      "pack": "file-iterator",
+      "binding": "builtin:files:iterate",
+      "stability": "experimental",
+      "host_api_version": "v1",
+      "timeout": "10m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json",
+        "jsonl"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil files:iterate [--root path] [--glob pattern] [--json|--jsonl|--format text|json|jsonl]",
+      "auto_enabled": false
+    },
+    {
+      "name": "github:init-ci",
+      "aliases": [],
+      "access": "conditional-write",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "git:read",
+        "filesystem:write"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--write"
+        }
+      ],
+      "arguments": [],
+      "source": "pack:github-cicd",
+      "pack": "github-cicd",
+      "binding": "builtin:github:init-ci",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "10m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [
+        "--write"
+      ],
+      "read_only_flags": [],
+      "usage": "vigil github:init-ci [--write] [--json]",
+      "auto_enabled": false
+    },
+    {
+      "name": "guards:summary",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:guards:summary",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil guards:summary [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "help",
+      "aliases": [
+        "--help",
+        "-h"
+      ],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [
+        {
+          "name": "COMMAND",
+          "required": true
+        }
+      ],
+      "source": "core",
+      "binding": "builtin:help",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil help [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "history:diagnose",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "git:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "pack:repo-health",
+      "pack": "repo-health",
+      "binding": "builtin:history:diagnose",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "10m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil history:diagnose [--json]",
+      "auto_enabled": false
+    },
+    {
+      "name": "hooks:doctor",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "git:read",
+        "process"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:hooks:doctor",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil hooks:doctor [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "hooks:install",
+      "aliases": [],
+      "access": "write",
+      "capabilities": [
+        "filesystem:read",
+        "filesystem:write",
+        "git:read",
+        "git:write",
+        "process"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--dry-run"
+        },
+        {
+          "long": "--chain"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:hooks:install",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [
+        "--dry-run"
+      ],
+      "usage": "vigil hooks:install [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "hooks:pre-commit",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "git:read",
+        "process"
+      ],
+      "args": "[args]",
+      "flags": [],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:hooks:pre-commit",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil hooks:pre-commit [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "hooks:pre-push",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "git:read",
+        "process"
+      ],
+      "args": "[args]",
+      "flags": [],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:hooks:pre-push",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil hooks:pre-push [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "hooks:uninstall",
+      "aliases": [],
+      "access": "write",
+      "capabilities": [
+        "filesystem:read",
+        "filesystem:write",
+        "git:read",
+        "git:write",
+        "process"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--dry-run"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:hooks:uninstall",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [
+        "--dry-run"
+      ],
+      "usage": "vigil hooks:uninstall [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "init",
+      "aliases": [],
+      "access": "conditional-write",
+      "capabilities": [
+        "filesystem:read",
+        "filesystem:write",
+        "interactive"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--profile",
+          "value_name": "PROFILE",
+          "values": [
+            "auto",
+            "generic",
+            "go-tool",
+            "static-site",
+            "js-app",
+            "php-app",
+            "native-app",
+            "mixed",
+            "custom"
+          ]
+        },
+        {
+          "long": "--write"
+        },
+        {
+          "long": "--force"
+        },
+        {
+          "long": "--yes"
+        },
+        {
+          "long": "--dry-run"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:init",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": true,
+      "write_flags": [
+        "--write",
+        "--force"
+      ],
+      "read_only_flags": [],
+      "usage": "vigil init [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "init:ci",
+      "aliases": [],
+      "access": "conditional-write",
+      "capabilities": [
+        "filesystem:read",
+        "filesystem:write"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--provider",
+          "value_name": "PROVIDER",
+          "values": [
+            "github"
+          ]
+        },
+        {
+          "long": "--write"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:init:ci",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [
+        "--write"
+      ],
+      "read_only_flags": [],
+      "usage": "vigil init:ci [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "javascript:quality",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "network"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "pack:dependency-adapters",
+      "pack": "dependency-adapters",
+      "binding": "builtin:javascript:quality",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "10m0s",
+      "network": "optional",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil javascript:quality [--json]",
+      "auto_enabled": false
+    },
+    {
+      "name": "list",
+      "aliases": [
+        "commands"
+      ],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:list",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil list [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "manpage",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--output",
+          "value_name": "PATH",
+          "file": true
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:manpage",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "roff"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil manpage [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "manpage:generate",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--output",
+          "value_name": "PATH",
+          "file": true
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:manpage:generate",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "roff"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil manpage:generate [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "manpage:install",
+      "aliases": [],
+      "access": "write",
+      "capabilities": [
+        "filesystem:read",
+        "filesystem:write"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--prefix",
+          "value_name": "PATH",
+          "file": true
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:manpage:install",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil manpage:install [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "next",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:next",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil next [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "npm:audit",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "network"
+      ],
+      "args": "[args]",
+      "flags": [],
+      "arguments": [],
+      "source": "pack:dependency-adapters",
+      "pack": "dependency-adapters",
+      "binding": "builtin:npm:audit",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "10m0s",
+      "network": "required",
+      "required_tools": [
+        "npm"
+      ],
+      "output_formats": [
+        "text"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil npm:audit [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "php:lint",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "pack:dependency-adapters",
+      "pack": "dependency-adapters",
+      "binding": "builtin:php:lint",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "10m0s",
+      "network": "none",
+      "required_tools": [
+        "php"
+      ],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil php:lint [--json]",
+      "auto_enabled": false
+    },
+    {
+      "name": "phpstan:analyse",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process"
+      ],
+      "args": "[args]",
+      "flags": [],
+      "arguments": [],
+      "source": "pack:dependency-adapters",
+      "pack": "dependency-adapters",
+      "binding": "builtin:phpstan:analyse",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "10m0s",
+      "network": "none",
+      "required_tools": [
+        "phpstan"
+      ],
+      "output_formats": [
+        "text"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil phpstan:analyse [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "plan",
+      "aliases": [],
+      "access": "conditional-write",
+      "capabilities": [
+        "filesystem:read",
+        "filesystem:write",
+        "git:read",
+        "process"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--output",
+          "value_name": "PATH",
+          "file": true
+        },
+        {
+          "long": "--force"
+        },
+        {
+          "long": "--tag",
+          "value_name": "TAG"
+        },
+        {
+          "long": "--timeout",
+          "value_name": "DURATION"
+        },
+        {
+          "long": "--jobs",
+          "value_name": "N"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:plan",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [
+        "git"
+      ],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [
+        "--output"
+      ],
+      "read_only_flags": [],
+      "usage": "vigil plan [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "plugins:conformance",
+      "aliases": [],
+      "access": "conditional-write",
+      "capabilities": [
+        "filesystem:read",
+        "filesystem:write",
+        "network",
+        "process"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--file",
+          "value_name": "PATH",
+          "file": true
+        },
+        {
+          "long": "--execute"
+        },
+        {
+          "long": "--timeout",
+          "value_name": "DURATION"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:plugins:conformance",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "30m0s",
+      "network": "optional",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [
+        "--execute"
+      ],
+      "read_only_flags": [],
+      "usage": "vigil plugins:conformance --file PATH [--execute --timeout DURATION] [--json]",
+      "auto_enabled": false
+    },
+    {
+      "name": "plugins:doctor",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:plugins:doctor",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil plugins:doctor [--json]",
+      "auto_enabled": false
+    },
+    {
+      "name": "plugins:index:verify",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "network"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--index",
+          "value_name": "SOURCE",
+          "file": true
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:plugins:index:verify",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "optional",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil plugins:index:verify --index PATH_OR_HTTPS_URL [--json]",
+      "auto_enabled": false
+    },
+    {
+      "name": "plugins:install",
+      "aliases": [],
+      "access": "write",
+      "capabilities": [
+        "filesystem:read",
+        "filesystem:write",
+        "network",
+        "process"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--file",
+          "value_name": "PATH",
+          "file": true
+        },
+        {
+          "long": "--index",
+          "value_name": "SOURCE",
+          "file": true
+        },
+        {
+          "long": "--id",
+          "value_name": "PLUGIN_ID"
+        },
+        {
+          "long": "--version",
+          "value_name": "VERSION"
+        },
+        {
+          "long": "--digest",
+          "value_name": "SHA256"
+        },
+        {
+          "long": "--approve",
+          "value_name": "CAPABILITY",
+          "repeatable": true
+        },
+        {
+          "long": "--approve-all"
+        },
+        {
+          "long": "--restore-trust"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:plugins:install",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "optional",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil --allow-mutation plugins:install (--file PATH|--index SOURCE --id ID --version VERSION) [--approve CAPABILITY ...|--approve-all]",
+      "auto_enabled": false
+    },
+    {
+      "name": "plugins:list",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:plugins:list",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil plugins:list [--json]",
+      "auto_enabled": false
+    },
+    {
+      "name": "plugins:publishers",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:plugins:publishers",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil plugins:publishers [--json]",
+      "auto_enabled": false
+    },
+    {
+      "name": "plugins:remove",
+      "aliases": [],
+      "access": "write",
+      "capabilities": [
+        "filesystem:read",
+        "filesystem:write"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--version",
+          "value_name": "VERSION"
+        },
+        {
+          "long": "--keep-trust"
+        }
+      ],
+      "arguments": [
+        {
+          "name": "PLUGIN_ID",
+          "required": true
+        }
+      ],
+      "source": "core",
+      "binding": "builtin:plugins:remove",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil --allow-mutation plugins:remove [--version VERSION] [--keep-trust] PLUGIN_ID",
+      "auto_enabled": false
+    },
+    {
+      "name": "plugins:revoke-publisher",
+      "aliases": [],
+      "access": "write",
+      "capabilities": [
+        "filesystem:read",
+        "filesystem:write"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [
+        {
+          "name": "KEY_ID",
+          "required": true
+        }
+      ],
+      "source": "core",
+      "binding": "builtin:plugins:revoke-publisher",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil --allow-mutation plugins:revoke-publisher KEY_ID",
+      "auto_enabled": false
+    },
+    {
+      "name": "plugins:trust-publisher",
+      "aliases": [],
+      "access": "write",
+      "capabilities": [
+        "filesystem:read",
+        "filesystem:write"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--key",
+          "value_name": "PATH",
+          "file": true
+        },
+        {
+          "long": "--name",
+          "value_name": "NAME"
+        },
+        {
+          "long": "--restore-trust"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:plugins:trust-publisher",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil --allow-mutation plugins:trust-publisher --key PATH --name NAME [--restore-trust]",
+      "auto_enabled": false
+    },
+    {
+      "name": "plugins:update",
+      "aliases": [],
+      "access": "write",
+      "capabilities": [
+        "filesystem:read",
+        "filesystem:write",
+        "network",
+        "process"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--file",
+          "value_name": "PATH",
+          "file": true
+        },
+        {
+          "long": "--index",
+          "value_name": "SOURCE",
+          "file": true
+        },
+        {
+          "long": "--id",
+          "value_name": "PLUGIN_ID"
+        },
+        {
+          "long": "--version",
+          "value_name": "VERSION"
+        },
+        {
+          "long": "--digest",
+          "value_name": "SHA256"
+        },
+        {
+          "long": "--approve",
+          "value_name": "CAPABILITY",
+          "repeatable": true
+        },
+        {
+          "long": "--approve-all"
+        },
+        {
+          "long": "--restore-trust"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:plugins:update",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "optional",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil --allow-mutation plugins:update (--file PATH|--index SOURCE --id ID --version VERSION) [--approve CAPABILITY ...|--approve-all]",
+      "auto_enabled": false
+    },
+    {
+      "name": "readme:check",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "git:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--path",
+          "value_name": "PATH",
+          "file": true
+        }
+      ],
+      "arguments": [],
+      "source": "pack:scribe",
+      "pack": "scribe",
+      "binding": "builtin:readme:check",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "10m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil readme:check [--json]",
+      "auto_enabled": false
+    },
+    {
+      "name": "readme:generate",
+      "aliases": [],
+      "access": "write",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "git:read",
+        "filesystem:write"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--dry-run"
+        },
+        {
+          "long": "--path",
+          "value_name": "PATH",
+          "file": true
+        }
+      ],
+      "arguments": [],
+      "source": "pack:scribe",
+      "pack": "scribe",
+      "binding": "builtin:readme:generate",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "10m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [
+        "--dry-run"
+      ],
+      "usage": "vigil readme:generate [--dry-run] [--path README.md] [--json]",
+      "auto_enabled": true
+    },
+    {
+      "name": "repo:health",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "git:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "pack:repo-health",
+      "pack": "repo-health",
+      "binding": "builtin:repo:health",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "10m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil repo:health [--json]",
+      "auto_enabled": false
+    },
+    {
+      "name": "resources:catalog",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:resources:catalog",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil resources:catalog [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "security:gitleaks",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "git:read"
+      ],
+      "args": "[args]",
+      "flags": [],
+      "arguments": [],
+      "source": "pack:security-adapters",
+      "pack": "security-adapters",
+      "binding": "builtin:security:gitleaks",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "10m0s",
+      "network": "none",
+      "required_tools": [
+        "gitleaks"
+      ],
+      "output_formats": [
+        "text"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil security:gitleaks [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "self-heal:plan",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:self-heal:plan",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil self-heal:plan [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "settings:show",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:settings:show",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil settings:show [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "setup",
+      "aliases": [],
+      "access": "conditional-write",
+      "capabilities": [
+        "filesystem:read",
+        "filesystem:write",
+        "interactive"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--profile",
+          "value_name": "PROFILE",
+          "values": [
+            "auto",
+            "generic",
+            "go-tool",
+            "static-site",
+            "js-app",
+            "php-app",
+            "native-app",
+            "mixed",
+            "custom"
+          ]
+        },
+        {
+          "long": "--write"
+        },
+        {
+          "long": "--force"
+        },
+        {
+          "long": "--yes"
+        },
+        {
+          "long": "--dry-run"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:setup",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": true,
+      "write_flags": [
+        "--write",
+        "--force"
+      ],
+      "read_only_flags": [],
+      "usage": "vigil setup [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "setup:wizard",
+      "aliases": [],
+      "access": "conditional-write",
+      "capabilities": [
+        "filesystem:read",
+        "filesystem:write",
+        "interactive"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--profile",
+          "value_name": "PROFILE",
+          "values": [
+            "auto",
+            "generic",
+            "go-tool",
+            "static-site",
+            "js-app",
+            "php-app",
+            "native-app",
+            "mixed",
+            "custom"
+          ]
+        },
+        {
+          "long": "--write"
+        },
+        {
+          "long": "--force"
+        },
+        {
+          "long": "--yes"
+        },
+        {
+          "long": "--dry-run"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:setup:wizard",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": true,
+      "write_flags": [
+        "--write",
+        "--force"
+      ],
+      "read_only_flags": [],
+      "usage": "vigil setup:wizard [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "status",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "git:read",
+        "process"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:status",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil status [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "support:bundle",
+      "aliases": [],
+      "access": "write",
+      "capabilities": [
+        "filesystem:read",
+        "filesystem:write"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--dry-run"
+        },
+        {
+          "long": "--include-config"
+        },
+        {
+          "long": "--include-git-status"
+        },
+        {
+          "long": "--output",
+          "value_name": "PATH",
+          "file": true
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:support:bundle",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [
+        "--dry-run"
+      ],
+      "usage": "vigil support:bundle [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "tests:affected",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "git:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "pack:test-adapters",
+      "pack": "test-adapters",
+      "binding": "builtin:tests:affected",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "10m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil tests:affected [--json]",
+      "auto_enabled": false
+    },
+    {
+      "name": "tests:history",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "pack:test-adapters",
+      "pack": "test-adapters",
+      "binding": "builtin:tests:history",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "10m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil tests:history [--json]",
+      "auto_enabled": false
+    },
+    {
+      "name": "tools:catalog",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:tools:catalog",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil tools:catalog [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "verify",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "git:read",
+        "process"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--format",
+          "value_name": "FORMAT",
+          "values": [
+            "text",
+            "json",
+            "jsonl",
+            "junit",
+            "github"
+          ]
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:verify",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json",
+        "jsonl",
+        "junit",
+        "github"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil verify [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "version",
+      "aliases": [
+        "--version"
+      ],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:version",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil version [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "workflow:local",
+      "aliases": [],
+      "access": "conditional-write",
+      "capabilities": [
+        "filesystem:read",
+        "filesystem:write",
+        "git:read",
+        "git:write",
+        "network",
+        "process",
+        "environment",
+        "secrets"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--format",
+          "value_name": "FORMAT",
+          "values": [
+            "text",
+            "json",
+            "jsonl",
+            "junit",
+            "github"
+          ]
+        },
+        {
+          "long": "--dry-run"
+        },
+        {
+          "long": "--tag",
+          "value_name": "TAG"
+        },
+        {
+          "long": "--timeout",
+          "value_name": "DURATION"
+        },
+        {
+          "long": "--jobs",
+          "value_name": "N"
+        },
+        {
+          "long": "--artifacts"
+        },
+        {
+          "long": "--artifacts-dir",
+          "value_name": "PATH",
+          "file": true
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:workflow:local",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "30m0s",
+      "network": "optional",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json",
+        "jsonl",
+        "junit",
+        "github"
+      ],
+      "interactive": false,
+      "write_flags": [
+        "--allow-mutation",
+        "--artifacts",
+        "--artifacts-dir"
+      ],
+      "read_only_flags": [],
+      "usage": "vigil workflow:local [args]",
+      "auto_enabled": false
+    }
+  ]
+}

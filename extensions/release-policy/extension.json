@@ -1,5 +1,6 @@
 {
   "schema_version": "1",
+  "host_api_version": "v1",
   "id": "release-policy",
   "name": "Release Policy Extension",
   "kind": "custom",
@@ -11,5 +12,27 @@
   "packages": [],
   "commands": [
     "checks:release-policy"
+  ],
+  "command_contracts": [
+    {
+      "command": "checks:release-policy",
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "git:read"
+      ],
+      "binding": "builtin:checks:release-policy",
+      "timeout": "10m0s",
+      "stability": "stable",
+      "required_tools": [],
+      "network": "none",
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "usage": "vigil checks:release-policy [--json]",
+      "description": "Check generic release readiness."
+    }
   ]
 }

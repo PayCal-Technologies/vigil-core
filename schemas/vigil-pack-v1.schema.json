@@ -1,0 +1,220 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vigil.dev/schemas/vigil-pack-v1.schema.json",
+  "title": "Vigil pack manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "host_api_version",
+    "id",
+    "name",
+    "kind",
+    "status",
+    "private",
+    "public_core",
+    "description",
+    "source_root",
+    "packages",
+    "commands",
+    "command_contracts"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "host_api_version": {
+      "const": "v1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "private": {
+      "type": "boolean"
+    },
+    "public_core": {
+      "type": "boolean"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_root": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![A-Za-z][A-Za-z0-9+.-]*:)(?!.*(?:^|/)\\.\\.?($|/))(?:[^\\s/?#:%\\\\]+)(?:/[^\\s/?#:%\\\\]+)*$"
+    },
+    "packages": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "commands": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)*$"
+      },
+      "uniqueItems": true
+    },
+    "command_contracts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/command_contract"
+      }
+    }
+  },
+  "$defs": {
+    "positive_duration": {
+      "type": "string",
+      "pattern": "^(?=.*[1-9])(?:[0-9]+(?:ns|us|µs|ms|s|m|h))+$"
+    },
+    "command_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command",
+        "access",
+        "capabilities",
+        "binding",
+        "timeout",
+        "stability",
+        "required_tools",
+        "network",
+        "output_formats",
+        "usage",
+        "description"
+      ],
+      "properties": {
+        "command": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)*$"
+        },
+        "access": {
+          "enum": [
+            "read",
+            "write",
+            "conditional-write"
+          ]
+        },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "filesystem:read",
+              "filesystem:write",
+              "git:read",
+              "git:write",
+              "network",
+              "process",
+              "environment",
+              "secrets",
+              "interactive"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "binding": {
+          "type": "string",
+          "pattern": "^builtin:[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)*$"
+        },
+        "timeout": {
+          "$ref": "#/$defs/positive_duration"
+        },
+        "stability": {
+          "enum": [
+            "experimental",
+            "stable",
+            "deprecated"
+          ]
+        },
+        "required_tools": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"
+          },
+          "uniqueItems": true
+        },
+        "network": {
+          "enum": [
+            "none",
+            "optional",
+            "required"
+          ]
+        },
+        "output_formats": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "text",
+              "json",
+              "jsonl",
+              "junit",
+              "sarif",
+              "github"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "write_flags": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^--[a-z][a-z0-9-]*$"
+          },
+          "uniqueItems": true
+        },
+        "read_only_flags": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^--[a-z][a-z0-9-]*$"
+          },
+          "uniqueItems": true
+        },
+        "usage": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "examples": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "install_hint": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

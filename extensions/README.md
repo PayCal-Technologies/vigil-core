@@ -21,7 +21,8 @@ Required fields:
 - `private`: whether the extension is local to the deployment.
 - `public_core`: whether implementation code is part of the public core.
 - `description`: concise purpose statement.
-- `source_root`: implementation location in the deployment checkout.
+- `source_root`: implementation location in the deployment checkout, written as
+  a safe relative slash-separated path such as `extensions/release-policy`.
 - `packages`: implementation packages or source paths.
 - `commands`: commands provided by the extension.
 

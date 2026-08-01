@@ -1,0 +1,35 @@
+{
+  "schema_version": "1",
+  "plan_id": "sha256:e4522020360bea929c81cc2439826a0fa800463d25b65bbfdc1eae3bc987d7a2",
+  "command": "workflow:local",
+  "created_at": "2026-07-31T18:00:00Z",
+  "inputs": {
+    "binary_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "config_path": "/repo/vigil.config.json",
+    "config_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "repository_root": "/repo",
+    "repository_head": "abc123",
+    "workspace_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "command_registry_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "pack_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "options": {
+    "tag_filter": "pre-push",
+    "default_timeout": "10m0s"
+  },
+  "gates": [
+    {
+      "name": "test",
+      "command": "go",
+      "args": [
+        "test",
+        "./..."
+      ],
+      "read_only": true,
+      "tags": [
+        "test",
+        "pre-push"
+      ]
+    }
+  ]
+}

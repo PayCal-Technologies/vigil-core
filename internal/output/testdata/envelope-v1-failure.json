@@ -1,0 +1,26 @@
+{
+  "schema_version": "1",
+  "command": "workflow:local",
+  "status": "mutation_violation",
+  "exit_code": 6,
+  "started_at": "2026-07-31T18:00:00Z",
+  "finished_at": "2026-07-31T18:00:01Z",
+  "duration_ms": 1000,
+  "warnings": [],
+  "errors": [
+    {
+      "code": "VIGIL_E_MUTATION_VIOLATION",
+      "message": "read-only gate changed the Git-visible workspace"
+    }
+  ],
+  "data": {
+    "gate": "repository check"
+  },
+  "artifacts": [
+    {
+      "kind": "mutation_diff",
+      "path": ".vigil/runs/fixture/mutation-diff.patch",
+      "media_type": "text/x-diff"
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 {
   "schema_version": "1",
+  "host_api_version": "v1",
   "id": "scribe",
   "name": "Scribe README Extension",
   "kind": "custom",
@@ -17,7 +18,25 @@
     {
       "command": "readme:generate",
       "access": "write",
-      "usage": "vigil readme:generate [--dry-run] [--path README.md]",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "git:read",
+        "filesystem:write"
+      ],
+      "binding": "builtin:readme:generate",
+      "timeout": "10m0s",
+      "stability": "stable",
+      "required_tools": [],
+      "network": "none",
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "read_only_flags": [
+        "--dry-run"
+      ],
+      "usage": "vigil readme:generate [--dry-run] [--path README.md] [--json]",
       "description": "Generate Scribe managed README block.",
       "examples": [
         "vigil readme:generate --dry-run",
@@ -27,6 +46,20 @@
     {
       "command": "readme:check",
       "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "git:read"
+      ],
+      "binding": "builtin:readme:check",
+      "timeout": "10m0s",
+      "stability": "stable",
+      "required_tools": [],
+      "network": "none",
+      "output_formats": [
+        "text",
+        "json"
+      ],
       "usage": "vigil readme:check [--json]",
       "description": "Check Scribe managed README block freshness."
     }

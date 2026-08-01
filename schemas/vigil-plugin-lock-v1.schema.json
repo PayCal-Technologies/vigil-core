@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vigil.dev/schemas/vigil-plugin-lock-v1.schema.json",
+  "title": "Vigil repository plugin lock v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "plugins"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "plugins": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/locked_plugin"
+      }
+    }
+  },
+  "$defs": {
+    "capability": {
+      "enum": [
+        "filesystem:read",
+        "filesystem:write",
+        "git:read",
+        "git:write",
+        "network",
+        "process",
+        "environment",
+        "secrets",
+        "interactive"
+      ]
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "locked_plugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "digest",
+        "metadata_digest",
+        "protocol_version",
+        "host_api_version",
+        "capabilities",
+        "commands",
+        "installed_binding",
+        "acquisition",
+        "index_digest",
+        "publisher_key_ids",
+        "signature_threshold"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+        },
+        "digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "metadata_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "protocol_version": {
+          "const": "1"
+        },
+        "host_api_version": {
+          "const": "v1"
+        },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/capability"
+          },
+          "uniqueItems": true
+        },
+        "commands": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)+$"
+          },
+          "uniqueItems": true
+        },
+        "installed_binding": {
+          "type": "string",
+          "pattern": "^plugin:[a-z][a-z0-9-]*@[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?#sha256:[0-9a-f]{64}$"
+        },
+        "acquisition": {
+          "enum": [
+            "local",
+            "signed-index"
+          ]
+        },
+        "index_digest": {
+          "type": "string"
+        },
+        "publisher_key_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/digest"
+          },
+          "uniqueItems": true
+        },
+        "signature_threshold": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "acquisition": {
+                "const": "local"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "index_digest": {
+                "const": ""
+              },
+              "publisher_key_ids": {
+                "maxItems": 0
+              },
+              "signature_threshold": {
+                "const": 0
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "index_digest": {
+                "$ref": "#/$defs/digest"
+              },
+              "publisher_key_ids": {
+                "minItems": 1
+              },
+              "signature_threshold": {
+                "minimum": 1
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

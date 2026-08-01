@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+
+case "${1:-}" in
+handshake)
+  printf '%s\n' '{"schema_version":"1","protocol_version":"1","plugin":{"id":"reference","name":"Reference Plugin","version":"1.0.0","description":"Language-neutral protocol conformance fixture.","host_api_version":"v1","commands":[{"name":"reference:echo","aliases":[],"summary":"Return a reference protocol response.","access":"read","capabilities":["filesystem:read"],"args":"[text]","flags":[],"arguments":[{"name":"TEXT","description":"Optional text to echo."}],"stability":"stable","timeout":"5s","network":"none","required_tools":["sed"],"output_formats":["text","json"],"interactive":false,"write_flags":[],"read_only_flags":[],"usage":"vigil reference:echo [text]","examples":["vigil reference:echo hello"]}]}}'
+  ;;
+execute)
+  IFS= read -r request
+  request_id="$(printf '%s\n' "$request" | sed -n 's/.*"request_id":"\([^"]*\)".*/\1/p')"
+  test -n "$request_id"
+  printf '{"schema_version":"1","protocol_version":"1","request_id":"%s","exit_code":0,"output":"reference plugin ok\\n","data":{"conformance":"ok"},"warnings":[],"errors":[],"artifacts":[]}\n' "$request_id"
+  ;;
+*)
+  printf '%s\n' 'unsupported plugin operation' >&2
+  exit 2
+  ;;
+esac

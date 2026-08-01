@@ -1,5 +1,6 @@
 {
   "schema_version": "1",
+  "host_api_version": "v1",
   "id": "repo-health",
   "name": "Repository Health Extension",
   "kind": "custom",
@@ -12,5 +13,47 @@
   "commands": [
     "repo:health",
     "history:diagnose"
+  ],
+  "command_contracts": [
+    {
+      "command": "repo:health",
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "git:read"
+      ],
+      "binding": "builtin:repo:health",
+      "timeout": "10m0s",
+      "stability": "stable",
+      "required_tools": [],
+      "network": "none",
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "usage": "vigil repo:health [--json]",
+      "description": "Report lightweight Git history diagnostics."
+    },
+    {
+      "command": "history:diagnose",
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "process",
+        "git:read"
+      ],
+      "binding": "builtin:history:diagnose",
+      "timeout": "10m0s",
+      "stability": "stable",
+      "required_tools": [],
+      "network": "none",
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "usage": "vigil history:diagnose [--json]",
+      "description": "Alias for repository health diagnostics."
+    }
   ]
 }

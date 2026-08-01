@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vigil.dev/schemas/vigil-config-v3.schema.json",
+  "title": "Vigil configuration v3",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "profile",
+    "project",
+    "coordination",
+    "gates",
+    "extensions"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "3"
+    },
+    "profile": {
+      "enum": [
+        "generic",
+        "go-tool",
+        "static-site",
+        "js-app",
+        "php-app",
+        "native-app",
+        "mixed",
+        "custom"
+      ]
+    },
+    "project": {
+      "type": "string",
+      "minLength": 1
+    },
+    "coordination": {
+      "type": "object",
+      "required": [
+        "mode",
+        "authoritative_surfaces",
+        "mutation_requires"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "minLength": 1
+        },
+        "authoritative_surfaces": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "mutation_requires": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "explicit-confirmation",
+              "clean-config",
+              "clean-tree"
+            ]
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "gates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "vigil-plan-v1.schema.json#/$defs/gate"
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "manifest_root",
+        "allowed_kinds",
+        "require_private"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "manifest_root": {
+          "type": "string",
+          "minLength": 1
+        },
+        "allowed_kinds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "enabled_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "disabled_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "require_private": {
+          "type": "boolean"
+        }
+      }
+    },
+    "plugins": {
+      "type": "object",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "require_signed": {
+                "const": true
+              }
+            },
+            "required": [
+              "require_signed"
+            ]
+          },
+          "then": {
+            "properties": {
+              "local": {
+                "const": "deny"
+              }
+            }
+          }
+        }
+      ],
+      "required": [
+        "mode",
+        "local",
+        "require_signed",
+        "allowed_ids",
+        "denied_ids",
+        "allowed_publisher_key_ids",
+        "denied_capabilities"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "enabled",
+            "disabled"
+          ]
+        },
+        "local": {
+          "enum": [
+            "allow",
+            "deny"
+          ]
+        },
+        "require_signed": {
+          "type": "boolean"
+        },
+        "min_signature_threshold": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "allowed_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+          },
+          "uniqueItems": true
+        },
+        "denied_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+          },
+          "uniqueItems": true
+        },
+        "allowed_publisher_key_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "uniqueItems": true
+        },
+        "denied_capabilities": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "filesystem:read",
+              "filesystem:write",
+              "git:read",
+              "git:write",
+              "network",
+              "process",
+              "environment",
+              "secrets",
+              "interactive"
+            ]
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "public_assumption_patterns": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  }
+}

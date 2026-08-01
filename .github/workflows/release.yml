@@ -6,37 +6,723 @@ on:
       - 'v*'
 
 permissions:
+  actions: read
+  attestations: write
   contents: write
+  id-token: write
+
+env:
+  GH_REPO: ${{ github.repository }}
+
+concurrency:
+  group: vigil-release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      prerelease: ${{ steps.channel.outputs.prerelease }}
+      make_latest: ${{ steps.channel.outputs.make_latest }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: '1.26.0'
+          go-version: '1.26.5'
           cache: false
-      - name: Test
-        run: go test ./...
-      - name: Build artifacts
+
+      - name: Classify release channel
+        id: channel
+        shell: bash
         run: |
-          mkdir -p dist
-          for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64; do
-            os="${target%/*}"
-            arch="${target#*/}"
-            GOOS="$os" GOARCH="$arch" go build -trimpath -ldflags="-s -w" -o "dist/vigil-${os}-${arch}" ./cmd/vigil
-          done
-          ./dist/vigil-linux-amd64 manpage > dist/vigil.1
-          ./dist/vigil-linux-amd64 completion bash > dist/vigil.bash
-          ./dist/vigil-linux-amd64 completion zsh > dist/_vigil
-          ./dist/vigil-linux-amd64 completion fish > dist/vigil.fish
-          (cd dist && sha256sum vigil-* vigil.* _vigil > SHA256SUMS)
-      - name: Publish release
-        uses: softprops/action-gh-release@6cbd405e2c4e67a21c47fa9e383d020e4e28b836 # v2
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            printf 'name=beta\nprerelease=true\nmake_latest=false\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'name=stable\nprerelease=false\nmake_latest=true\n' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Capture v1 acceptance gate report
+        id: v1_acceptance
+        shell: bash
+        run: |
+          mkdir -p bin dist
+          go build \
+            -mod=readonly \
+            -buildvcs=false \
+            -trimpath \
+            -o bin/v1-acceptance-check \
+            ./scripts/v1-acceptance-check.go
+          set +e
+          ./bin/v1-acceptance-check \
+            --version "${GITHUB_REF_NAME#v}" \
+            --json > dist/v1-acceptance-gate.json
+          status=$?
+          set -e
+          cat dist/v1-acceptance-gate.json
+          printf 'exit_code=%s\n' "$status" >> "$GITHUB_OUTPUT"
+
+      - name: Upload v1 acceptance gate report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          files: |
-            dist/vigil-*
-            dist/vigil.*
-            dist/_vigil
+          name: v1-acceptance-gate-${{ github.ref_name }}-${{ github.sha }}
+          path: dist/v1-acceptance-gate.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Enforce stable v1 acceptance
+        shell: bash
+        run: |
+          if [[ "${{ steps.v1_acceptance.outputs.exit_code }}" != "0" ]]; then
+            echo "stable v1 acceptance gate failed; see v1-acceptance-gate.json" >&2
+            exit 1
+          fi
+
+      - name: Refuse release asset replacement
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "release already exists and must not be replaced: $GITHUB_REF_NAME" >&2
+            exit 3
+          fi
+
+      - name: Verify source
+        shell: bash
+        run: |
+          unformatted="$(gofmt -l .)"
+          test -z "$unformatted" || {
+            printf 'Files require gofmt:\n%s\n' "$unformatted"
+            exit 1
+          }
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.9 .github/workflows/*.yml
+          bash -n scripts/*.sh
+          go test ./...
+          go test -race ./...
+          go vet ./...
+          go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...
+          go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+          scripts/run-fuzz-smoke.sh
+          scripts/check-performance.sh
+
+      - name: Verify release binary contracts
+        shell: bash
+        run: |
+          mkdir -p bin
+          CGO_ENABLED=0 go build -trimpath -o bin/vigil ./cmd/vigil
+          ./bin/vigil \
+            --config examples/vigil.config.json \
+            --allow-mutation \
+            plugins:conformance \
+            --file examples/plugins/reference/vigil-plugin-reference \
+            --execute \
+            --json
+          ./bin/vigil verify --json
+          ./bin/vigil workflow:local --json
+
+      - name: Build reproducible release archives
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          SKIP_HOMEBREW_FORMULA: '1'
+        run: |
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          export SOURCE_DATE_EPOCH
+          scripts/build-release.sh
+
+      - name: Verify reproducibility
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          SKIP_HOMEBREW_FORMULA: '1'
+        run: |
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          export SOURCE_DATE_EPOCH
+          scripts/check-release-reproducibility.sh dist
+
+      - name: Upload reproducible unsigned candidate
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: vigil-release-candidate-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  sign-macos:
+    needs: build
+    runs-on: macos-15
+    environment: release
+    permissions:
+      actions: read
+      contents: read
+    env:
+      APPLE_DEVELOPER_ID_CERTIFICATE_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_BASE64 }}
+      APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_NOTARY_PRIVATE_KEY_BASE64: ${{ secrets.APPLE_NOTARY_PRIVATE_KEY_BASE64 }}
+      APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+      APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+    steps:
+      - name: Verify immutable releases are enabled
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_ADMIN_READ_TOKEN }}
+        shell: bash
+        run: |
+          if [[ -z "$GH_TOKEN" ]]; then
+            echo "required release secret is empty: RELEASE_ADMIN_READ_TOKEN" >&2
+            exit 2
+          fi
+          immutable="$(
+            gh api \
+              -H "X-GitHub-Api-Version: 2026-03-10" \
+              "repos/${GITHUB_REPOSITORY}/immutable-releases" \
+              --jq .enabled 2>/dev/null
+          )" || {
+            echo "repository release immutability is disabled or could not be verified" >&2
+            exit 2
+          }
+          if [[ "$immutable" != true ]]; then
+            echo "repository release immutability is not enabled" >&2
+            exit 2
+          fi
+
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.26.5'
+          cache: false
+
+      - name: Download reproducible unsigned candidate
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: vigil-release-candidate-${{ github.sha }}
+          path: dist
+
+      - name: Require Apple release credentials
+        shell: bash
+        run: |
+          required=(
+            APPLE_DEVELOPER_ID_CERTIFICATE_BASE64
+            APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD
+            APPLE_SIGNING_IDENTITY
+            APPLE_NOTARY_PRIVATE_KEY_BASE64
+            APPLE_NOTARY_KEY_ID
+            APPLE_NOTARY_ISSUER_ID
+          )
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "required release secret is empty: $name" >&2
+              exit 2
+            fi
+          done
+
+      - name: Import Developer ID certificate
+        shell: bash
+        run: |
+          certificate_path="$RUNNER_TEMP/vigil-developer-id.p12"
+          notary_key_path="$RUNNER_TEMP/AuthKey_${APPLE_NOTARY_KEY_ID}.p8"
+          keychain_path="$RUNNER_TEMP/vigil-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 32)"
+
+          {
+            printf 'APPLE_NOTARY_KEY_PATH=%s\n' "$notary_key_path"
+            printf 'VIGIL_CERTIFICATE_PATH=%s\n' "$certificate_path"
+            printf 'VIGIL_KEYCHAIN_PATH=%s\n' "$keychain_path"
+          } >> "$GITHUB_ENV"
+
+          printf '%s' "$APPLE_DEVELOPER_ID_CERTIFICATE_BASE64" | base64 -D > "$certificate_path"
+          printf '%s' "$APPLE_NOTARY_PRIVATE_KEY_BASE64" | base64 -D > "$notary_key_path"
+          chmod 0600 "$certificate_path" "$notary_key_path"
+
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$certificate_path" \
+            -P "$APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$keychain_path"
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$keychain_password" \
+            "$keychain_path"
+          security list-keychains -d user -s "$keychain_path"
+          security find-identity -v -p codesigning "$keychain_path"
+
+      - name: Sign and notarize macOS archives
+        env:
+          VIGIL_NOTARY_LOG_DIR: dist
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          epoch="$(git show -s --format=%ct HEAD)"
+          for arch in amd64 arm64; do
+            scripts/sign-notarize-macos-archive.sh \
+              "dist/vigil_${version}_darwin_${arch}.tar.gz" \
+              "$version" \
+              "$arch" \
+              "$epoch"
+          done
+
+      - name: Upload signed macOS archives
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: vigil-signed-macos-${{ github.sha }}
+          path: |
+            dist/vigil_*_darwin_*.tar.gz
+            dist/vigil_*_darwin_*.notary-*.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+      - name: Remove ephemeral signing material
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          if [[ -n "${VIGIL_KEYCHAIN_PATH:-}" ]]; then
+            security delete-keychain "$VIGIL_KEYCHAIN_PATH" || true
+          fi
+          rm -f \
+            "${VIGIL_CERTIFICATE_PATH:-$RUNNER_TEMP/vigil-developer-id.p12}" \
+            "${APPLE_NOTARY_KEY_PATH:-$RUNNER_TEMP/vigil-notary-key.p8}"
+
+  publish:
+    needs:
+      - build
+      - sign-macos
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      actions: read
+      attestations: write
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+
+      - name: Download reproducible candidate
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: vigil-release-candidate-${{ github.sha }}
+          path: dist
+
+      - name: Download signed macOS archives
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: vigil-signed-macos-${{ github.sha }}
+          path: signed-macos
+
+      - name: Assemble signed release candidate
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          rm -f \
+            dist/vigil_*_darwin_*.tar.gz \
+            dist/*.notary-*.json \
+            dist/SHA256SUMS \
+            dist/SHA256SUMS.sigstore.json
+          cp signed-macos/* dist/
+          scripts/generate-homebrew-formula.sh dist
+
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: ./dist
+          format: spdx-json
+          output-file: ./dist/vigil_${{ github.ref_name }}_sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Finalize checksums
+        run: scripts/release-checksums.sh dist
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Sign checksums
+        run: cosign sign-blob dist/SHA256SUMS --bundle dist/SHA256SUMS.sigstore.json --yes
+
+      - name: Attest release artifacts
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.notary-*.json
+            dist/*_sbom.spdx.json
+            dist/v1-acceptance-gate.json
+            dist/vigil.rb
             dist/SHA256SUMS
+            dist/SHA256SUMS.sigstore.json
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          assets=(
+            dist/*.tar.gz
+            dist/*.notary-*.json
+            dist/*_sbom.spdx.json
+            dist/v1-acceptance-gate.json
+            dist/vigil.rb
+            dist/SHA256SUMS
+            dist/SHA256SUMS.sigstore.json
+          )
+          gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
+            --draft \
+            --prerelease \
+            --latest=false \
+            --generate-notes \
+            --verify-tag
+          test "$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft)" = true
+
+      - name: Download uploaded draft assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "${GITHUB_REF_NAME}" --dir downloaded
+
+      - name: Verify uploaded draft assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd downloaded
+          sha256sum -c SHA256SUMS
+          cosign verify-blob SHA256SUMS \
+            --bundle SHA256SUMS.sigstore.json \
+            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/${GITHUB_REF_NAME}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+          for artifact in ./*.tar.gz ./*.notary-*.json ./*_sbom.spdx.json v1-acceptance-gate.json vigil.rb SHA256SUMS SHA256SUMS.sigstore.json; do
+            gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY"
+          done
+
+  native-release-smoke:
+    name: Native release smoke (${{ matrix.target }})
+    needs: publish
+    permissions:
+      attestations: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-amd64
+            runner: ubuntu-24.04
+            goos: linux
+            goarch: amd64
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+            goos: linux
+            goarch: arm64
+          - target: darwin-amd64
+            runner: macos-15-intel
+            goos: darwin
+            goarch: amd64
+          - target: darwin-arm64
+            runner: macos-15
+            goos: darwin
+            goarch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Download matching draft archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          archive="vigil_${version}_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz"
+          mkdir downloaded
+          gh release download "$GITHUB_REF_NAME" \
+            --dir downloaded \
+            --pattern "$archive" \
+            --pattern SHA256SUMS \
+            --pattern SHA256SUMS.sigstore.json
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Verify native archive provenance and checksum
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          archive="vigil_${version}_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz"
+          cd downloaded
+          expected="$(awk -v archive="$archive" '$2 == archive { print $1 }' SHA256SUMS)"
+          actual="$(openssl dgst -sha256 "$archive" | awk '{ print $NF }')"
+          test -n "$expected"
+          test "$actual" = "$expected"
+          cosign verify-blob SHA256SUMS \
+            --bundle SHA256SUMS.sigstore.json \
+            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/${GITHUB_REF_NAME}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+          gh attestation verify "$archive" --repo "$GITHUB_REPOSITORY"
+
+      - name: Smoke test native downloaded archive
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          archive="$PWD/downloaded/vigil_${version}_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz"
+          scripts/smoke-release-archive.sh "$archive" "$version" "${{ matrix.goos }}" "${{ matrix.goarch }}"
+
+  homebrew-candidate-test:
+    name: Homebrew draft install test (${{ matrix.target }})
+    if: ${{ !contains(github.ref_name, '-') }}
+    needs: native-release-smoke
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-amd64
+            runner: macos-15-intel
+            goarch: amd64
+          - target: darwin-arm64
+            runner: macos-15
+            goarch: arm64
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    steps:
+      - name: Download draft formula and matching archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          archive="vigil_${version}_darwin_${{ matrix.goarch }}.tar.gz"
+          mkdir downloaded
+          gh release download "$GITHUB_REF_NAME" \
+            --dir downloaded \
+            --pattern vigil.rb \
+            --pattern "$archive"
+
+      - name: Style, audit, install, and test draft formula
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          archive="vigil_${version}_darwin_${{ matrix.goarch }}.tar.gz"
+          local_archive="downloaded/vigil-${version}.tar.gz"
+          release_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${archive}"
+          cp "downloaded/$archive" "$local_archive"
+          cmp "downloaded/$archive" "$local_archive"
+          local_url="file://${PWD}/${local_archive}"
+          tap="vigil/release-candidate"
+          brew tap-new --no-git "$tap"
+          formula="$(brew --repository "$tap")/Formula/vigil.rb"
+          cp downloaded/vigil.rb "$formula"
+          brew style "$formula"
+          brew audit --strict "$tap/vigil"
+          test "$(brew info --json=v2 "$tap/vigil" | jq -r '.formulae[0].versions.stable')" = "$version"
+          test "$(grep -Fc "url \"$release_url\"" "$formula")" = 1
+          RELEASE_URL="$release_url" LOCAL_URL="$local_url" \
+            perl -0pi -e 's/\Q$ENV{RELEASE_URL}\E/$ENV{LOCAL_URL}/g' "$formula"
+          test "$(grep -Fc "url \"$release_url\"" "$formula")" = 0
+          test "$(grep -Fc "url \"$local_url\"" "$formula")" = 1
+          test "$(brew info --json=v2 "$tap/vigil" | jq -r '.formulae[0].versions.stable')" = "$version"
+          brew install --build-from-source "$tap/vigil"
+          brew test "$tap/vigil"
+
+  publish-verified-release:
+    name: Publish verified release
+    needs:
+      - native-release-smoke
+      - homebrew-candidate-test
+    if: >-
+      ${{
+        always() &&
+        needs.native-release-smoke.result == 'success' &&
+        (needs.homebrew-candidate-test.result == 'success' ||
+         needs.homebrew-candidate-test.result == 'skipped')
+      }}
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - name: Publish draft in its final channel state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          state="$(gh release view "$GITHUB_REF_NAME" --json isDraft)"
+          test "$(jq -r .isDraft <<<"$state")" = true
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            gh release edit "$GITHUB_REF_NAME" \
+              --draft=false \
+              --prerelease \
+              --verify-tag
+            expected_prerelease=true
+          else
+            gh release edit "$GITHUB_REF_NAME" \
+              --draft=false \
+              --prerelease=false \
+              --latest \
+              --verify-tag
+            expected_prerelease=false
+          fi
+          state="$(gh release view "$GITHUB_REF_NAME" --json isDraft,isImmutable,isPrerelease)"
+          test "$(jq -r .isDraft <<<"$state")" = false
+          test "$(jq -r .isPrerelease <<<"$state")" = "$expected_prerelease"
+          test "$(jq -r .isImmutable <<<"$state")" = true
+          gh release verify "$GITHUB_REF_NAME"
+
+  homebrew-public-test:
+    name: Homebrew public install test (${{ matrix.target }})
+    if: ${{ !contains(github.ref_name, '-') }}
+    needs: publish-verified-release
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-amd64
+            runner: macos-15-intel
+          - target: darwin-arm64
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      attestations: read
+      contents: read
+    steps:
+      - name: Download and verify immutable public release formula
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          mkdir downloaded
+          gh release download "$GITHUB_REF_NAME" \
+            --dir downloaded \
+            --pattern vigil.rb
+          gh release verify "$GITHUB_REF_NAME"
+          gh release verify-asset "$GITHUB_REF_NAME" downloaded/vigil.rb
+          gh attestation verify downloaded/vigil.rb --repo "$GITHUB_REPOSITORY"
+
+      - name: Install, audit, and test public formula
+        shell: bash
+        run: |
+          tap="vigil/public-release"
+          brew tap-new --no-git "$tap"
+          formula="$(brew --repository "$tap")/Formula/vigil.rb"
+          cp downloaded/vigil.rb "$formula"
+          brew style "$formula"
+          brew install --build-from-source "$tap/vigil"
+          brew audit --strict --online --installed "$tap/vigil"
+          brew test "$tap/vigil"
+
+  publish-homebrew:
+    if: ${{ !contains(github.ref_name, '-') }}
+    needs: homebrew-public-test
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      attestations: read
+      contents: read
+    env:
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+    steps:
+      - name: Require Homebrew tap credential
+        shell: bash
+        run: |
+          if [[ -z "$HOMEBREW_TAP_TOKEN" ]]; then
+            echo "required release secret is empty: HOMEBREW_TAP_TOKEN" >&2
+            exit 2
+          fi
+
+      - name: Download tested release formula
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          mkdir downloaded
+          gh release download "$GITHUB_REF_NAME" \
+            --dir downloaded \
+            --pattern vigil.rb
+          gh release verify "$GITHUB_REF_NAME"
+          gh release verify-asset "$GITHUB_REF_NAME" downloaded/vigil.rb
+          gh attestation verify downloaded/vigil.rb --repo "$GITHUB_REPOSITORY"
+
+      - name: Check out project tap
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          repository: PayCal-Technologies/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Publish formula to project tap
+        shell: bash
+        run: |
+          mkdir -p tap/Formula
+          cp downloaded/vigil.rb tap/Formula/vigil.rb
+          if git -C tap diff --quiet -- Formula/vigil.rb &&
+            git -C tap ls-files --error-unmatch Formula/vigil.rb >/dev/null; then
+            echo "Homebrew tap formula is already current"
+            exit 0
+          fi
+          git -C tap config user.name "github-actions[bot]"
+          git -C tap config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C tap add Formula/vigil.rb
+          git -C tap commit -m "vigil ${GITHUB_REF_NAME}"
+          git -C tap push origin HEAD
+
+  collect-v1-operational-evidence:
+    name: Collect v1 operational evidence
+    if: ${{ !contains(github.ref_name, '-') }}
+    needs: publish-homebrew
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      actions: read
+      attestations: read
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.26.5'
+          cache: false
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Collect release, native, and Homebrew evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ADMIN_READ_TOKEN: ${{ secrets.RELEASE_ADMIN_READ_TOKEN }}
+        run: |
+          go run ./scripts/collect-v1-operational-evidence.go \
+            --repo "$GITHUB_REPOSITORY" \
+            --tag "$GITHUB_REF_NAME" \
+            --tap-repo PayCal-Technologies/homebrew-tap \
+            --workflow-run-id "$GITHUB_RUN_ID" \
+            --require-release-proof \
+            --output v1-operational-evidence.json
+
+      - name: Upload v1 operational evidence report
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: v1-operational-evidence-${{ github.ref_name }}
+          path: v1-operational-evidence.json
+          if-no-files-found: error
+          retention-days: 90

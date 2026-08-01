@@ -1,0 +1,320 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vigil.dev/schemas/vigil-v1-acceptance-ledger-v1.schema.json",
+  "title": "Vigil v1 acceptance ledger",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "target",
+    "criteria"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "target": {
+      "const": "v1.0"
+    },
+    "criteria": {
+      "type": "array",
+      "minItems": 32,
+      "items": {
+        "$ref": "#/$defs/criterion"
+      }
+    }
+  },
+  "$defs": {
+    "criterion_id": {
+      "type": "string",
+      "pattern": "^VIGIL-(SI|AC)-[0-9]{2}$"
+    },
+    "operational_criterion_id": {
+      "enum": [
+        "VIGIL-AC-09",
+        "VIGIL-AC-11",
+        "VIGIL-AC-12",
+        "VIGIL-AC-13",
+        "VIGIL-AC-18"
+      ]
+    },
+    "external_criterion_id": {
+      "enum": [
+        "VIGIL-AC-16",
+        "VIGIL-AC-17",
+        "VIGIL-AC-19",
+        "VIGIL-AC-20",
+        "VIGIL-AC-21"
+      ]
+    },
+    "relative_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+"
+    },
+    "criterion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "domain",
+        "statement",
+        "status",
+        "evidence"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/criterion_id"
+        },
+        "domain": {
+          "enum": [
+            "safety",
+            "command",
+            "config",
+            "plan",
+            "output",
+            "exit",
+            "plugin",
+            "deprecation",
+            "platform",
+            "distribution",
+            "installation",
+            "workflow",
+            "review",
+            "governance",
+            "severity"
+          ]
+        },
+        "statement": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "verified",
+            "operational_pending",
+            "external_pending"
+          ]
+        },
+        "blocker": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "const": "verified"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "blocker": {
+                "maxLength": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "enum": [
+                  "operational_pending",
+                  "external_pending"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "blocker"
+            ],
+            "properties": {
+              "blocker": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "const": "operational_pending"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/operational_criterion_id"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "const": "external_pending"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/external_criterion_id"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "id",
+              "status"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/operational_criterion_id"
+              },
+              "status": {
+                "const": "verified"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "contains": {
+                  "required": [
+                    "kind"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "operational_report"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "id",
+              "status"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/external_criterion_id"
+              },
+              "status": {
+                "const": "verified"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "contains": {
+                  "required": [
+                    "kind"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "external_report"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "path"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "go_test",
+            "document",
+            "external_report",
+            "operational_report",
+            "schema",
+            "script",
+            "workflow"
+          ]
+        },
+        "path": {
+          "$ref": "#/$defs/relative_path"
+        },
+        "symbol": {
+          "type": "string",
+          "pattern": "^Test($|[A-Z0-9_][A-Za-z0-9_]*)$"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "go_test"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "symbol"
+            ],
+            "properties": {
+              "path": {
+                "pattern": "_test\\.go$"
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "symbol"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}
