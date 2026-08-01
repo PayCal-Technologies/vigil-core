@@ -2,6 +2,8 @@
 
 Tagged releases are built by `.github/workflows/release.yml`. Do not upload
 locally built binaries as official assets.
+Before pushing a release tag, complete the repository-side checks in
+[`github-release-readiness.md`](github-release-readiness.md).
 
 Stable tags use `vX.Y.Z`. Prerelease tags such as `vX.Y.Z-beta.N` produce beta
 releases without replacing the latest stable release. Scheduled and manually

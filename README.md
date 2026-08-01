@@ -451,6 +451,7 @@ and the checked-in [schemas](schemas/README.md).
 - [Deprecation policy](docs/deprecations.md)
 - [Release process](docs/releasing.md)
 - [Release channels](docs/release-channels.md)
+- [GitHub release readiness](docs/github-release-readiness.md)
 - [Changelog](CHANGELOG.md)
 
 Security reports must follow [SECURITY.md](SECURITY.md).
