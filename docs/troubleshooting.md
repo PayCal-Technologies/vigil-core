@@ -58,18 +58,22 @@ not needed.
 ## Built-In Feature Collection Is Missing or Broken
 
 Run `extensions:list --json` and `extensions:doctor --json`. Inspect layer
-origin, override evidence, host API, command contract completeness, allowed
-kinds, enabled/disabled IDs, and repository confinement. A layer is limited to
-1,024 entries and a manifest to 1 MiB.
+origin, override evidence, compatible host API, complete command details,
+allowed kinds, enabled/disabled IDs, and repository path limits. A layer is
+limited to 1,024 entries and a manifest to 1 MiB.
 
 Released binaries always contain the official built-in feature collections.
 Empty-directory output should therefore still list those collections.
 
 ## Plugin Is Blocked
 
-Use `plugins:list`, `plugins:doctor`, and `plugins:publishers`. Check the exact
-digest, metadata digest, local capability approval, revocation state,
-repository policy, publisher set, and signature threshold.
+Use `plugins:list`, `plugins:doctor`, and `plugins:publishers`. Check whether
+the extension file still matches the lock, whether its requested access was
+approved locally, whether it or its publisher was revoked, and whether the
+repository policy allows it.
+
+The detailed output also shows the exact executable digest, metadata digest,
+publisher set, and signature threshold for audit or support work.
 
 Do not delete trust/revocation state or lower policy to force execution. For a
 new build, use the explicit update path. For an old build, follow exact
