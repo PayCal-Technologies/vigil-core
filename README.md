@@ -30,12 +30,21 @@ not provide.
 > `main` documents the upcoming v0.2 beta. Some commands, archive contents,
 > release guarantees, and plugin/distribution workflows are not available in
 > the current `v0.1.0` release.
+>
+> Public release note: the beginner-friendly command surface described below is
+> implemented on `main` and intended for `v0.2.0-beta.1`. As of 2026-08-02, that
+> beta cannot be published until the GitHub release environment has its Apple
+> signing/notary secrets configured and the quality workflow is green.
 
 ## Current Public Surface
 
 The standalone binary provides:
 
 - versioned JSON configuration and migration;
+- beginner commands such as `vigil check`, `vigil setup`, `vigil explain`,
+  `vigil status`, and `vigil learn`;
+- plain-language guided setup, help, status, and failure explanations layered
+  over the same command registry and execution engine;
 - a typed command registry used by help, command discovery, completions, and
   manpages;
 - direct argv execution by default, with explicit shell opt-in;
@@ -109,9 +118,10 @@ then publishes the matching formula to the project tap when
 `v0.1.0` is the current public release and only remote tag. GitHub release
 immutability is enabled for future releases, but the existing `v0.1.0` release
 itself is not immutable. The next intended public candidate is
-`v0.2.0-beta.1`, which should exercise the signed archive, checksum, SBOM,
-Sigstore, attestation, native-smoke, and prerelease publication path after the
-release environment tag policy and secrets are configured.
+`v0.2.0-beta.1`, which includes the beginner command surface and should
+exercise the signed archive, checksum, SBOM, Sigstore, attestation,
+native-smoke, and prerelease publication path after the release environment
+secrets are configured and the quality workflow is green.
 
 `v1.0.0` is intentionally blocked until the external and operational acceptance
 ledger is complete. The stable v1 release gate fails closed and emits

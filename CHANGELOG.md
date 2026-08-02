@@ -8,6 +8,13 @@ acceptance ledger is complete.
 
 ## Unreleased
 
+- Add beginner-facing command aliases and guided language for setup, checks,
+  explanation, status, learning, and safe next actions.
+- Add presentation-oriented terminology that describes checks, file changes,
+  access, saved reports, reviewed plans, feature collections, and executable
+  extensions in plainer language without changing machine contracts.
+- Clarify README and troubleshooting wording around executable extensions:
+  access approval is not an operating-system sandbox.
 - Polish release, Homebrew, and GitHub repository metadata.
 
 ## v0.2.0-beta.1 - Planned
