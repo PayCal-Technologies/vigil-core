@@ -258,7 +258,7 @@ func coreCommandSpecs() []vigilcli.Command {
 		command("init", "Setup", "Alias for setup:wizard.", vigilcli.AccessConditionalWrite, interactiveWrite, setupCommand),
 		command("setup", "Setup", "Plan or apply first-run Vigil configuration setup.", vigilcli.AccessConditionalWrite, interactiveWrite, setupCommand),
 		command("setup:wizard", "Setup", "Run the interactive setup wizard.", vigilcli.AccessConditionalWrite, interactiveWrite, setupCommand),
-		command("guards:summary", "Core", "Summarize read-only and mutating command coverage.", vigilcli.AccessRead, fsRead, func(inv vigilcli.Invocation) int {
+		command("guards:summary", "Core", "Summarize read-only commands and commands that write files.", vigilcli.AccessRead, fsRead, func(inv vigilcli.Invocation) int {
 			return guardsSummary(inv.Args)
 		}),
 		command("self-heal:plan", "Core", "Suggest safe repairs for local configuration and setup.", vigilcli.AccessRead, fsRead, func(inv vigilcli.Invocation) int {
@@ -270,40 +270,40 @@ func coreCommandSpecs() []vigilcli.Command {
 		command("resources:catalog", "Core", "List public local diagnostic resources.", vigilcli.AccessRead, fsRead, func(inv vigilcli.Invocation) int {
 			return catalogCommand(inv.Command, inv.Args)
 		}),
-		command("extensions:list", "Packs", "List loaded pack manifests.", vigilcli.AccessRead, fsRead, func(inv vigilcli.Invocation) int {
+		command("extensions:list", "Packs", "List loaded built-in feature manifests.", vigilcli.AccessRead, fsRead, func(inv vigilcli.Invocation) int {
 			return extensionCommand(inv.Command, inv.Args)
 		}),
-		command("extensions:doctor", "Packs", "Validate loaded pack manifests.", vigilcli.AccessRead, fsRead, func(inv vigilcli.Invocation) int {
+		command("extensions:doctor", "Packs", "Validate loaded built-in feature manifests.", vigilcli.AccessRead, fsRead, func(inv vigilcli.Invocation) int {
 			return extensionCommand(inv.Command, inv.Args)
 		}),
-		command("plugins:list", "Plugins", "List locked plugins and local trust state.", vigilcli.AccessRead, pluginRead, func(inv vigilcli.Invocation) int {
+		command("plugins:list", "Plugins", "List installed extensions and local trust state.", vigilcli.AccessRead, pluginRead, func(inv vigilcli.Invocation) int {
 			return pluginLifecycleCommand(inv.Context, inv.Command, inv.ConfigPath, inv.Args)
 		}),
-		command("plugins:doctor", "Plugins", "Verify plugin digests, trust, compatibility, and handshakes.", vigilcli.AccessRead, pluginRead, func(inv vigilcli.Invocation) int {
+		command("plugins:doctor", "Plugins", "Verify installed extension files, trust, compatibility, and startup checks.", vigilcli.AccessRead, pluginRead, func(inv vigilcli.Invocation) int {
 			return pluginLifecycleCommand(inv.Context, inv.Command, inv.ConfigPath, inv.Args)
 		}),
-		command("plugins:conformance", "Plugins", "Validate an external executable against the plugin protocol.", vigilcli.AccessConditionalWrite, pluginConformance, func(inv vigilcli.Invocation) int {
+		command("plugins:conformance", "Plugins", "Validate an external executable against the extension protocol.", vigilcli.AccessConditionalWrite, pluginConformance, func(inv vigilcli.Invocation) int {
 			return pluginLifecycleCommand(inv.Context, inv.Command, inv.ConfigPath, inv.Args)
 		}),
-		command("plugins:publishers", "Plugins", "List trusted and revoked plugin publisher keys.", vigilcli.AccessRead, fsRead, func(inv vigilcli.Invocation) int {
+		command("plugins:publishers", "Plugins", "List trusted and revoked extension publisher keys.", vigilcli.AccessRead, fsRead, func(inv vigilcli.Invocation) int {
 			return pluginLifecycleCommand(inv.Context, inv.Command, inv.ConfigPath, inv.Args)
 		}),
-		command("plugins:index:verify", "Plugins", "Verify a signed plugin index against local publisher trust.", vigilcli.AccessRead, pluginIndexRead, func(inv vigilcli.Invocation) int {
+		command("plugins:index:verify", "Plugins", "Verify a signed extension index against local publisher trust.", vigilcli.AccessRead, pluginIndexRead, func(inv vigilcli.Invocation) int {
 			return pluginLifecycleCommand(inv.Context, inv.Command, inv.ConfigPath, inv.Args)
 		}),
-		command("plugins:install", "Plugins", "Install and trust a local or signed-index plugin executable.", vigilcli.AccessWrite, pluginIndexWrite, func(inv vigilcli.Invocation) int {
+		command("plugins:install", "Plugins", "Install and trust a local or signed-index extension executable.", vigilcli.AccessWrite, pluginIndexWrite, func(inv vigilcli.Invocation) int {
 			return pluginLifecycleCommand(inv.Context, inv.Command, inv.ConfigPath, inv.Args)
 		}),
-		command("plugins:update", "Plugins", "Update a locked plugin from a local file or signed index.", vigilcli.AccessWrite, pluginIndexWrite, func(inv vigilcli.Invocation) int {
+		command("plugins:update", "Plugins", "Update a locked extension from a local file or signed index.", vigilcli.AccessWrite, pluginIndexWrite, func(inv vigilcli.Invocation) int {
 			return pluginLifecycleCommand(inv.Context, inv.Command, inv.ConfigPath, inv.Args)
 		}),
-		command("plugins:remove", "Plugins", "Remove and locally revoke a locked plugin.", vigilcli.AccessWrite, pluginStateWrite, func(inv vigilcli.Invocation) int {
+		command("plugins:remove", "Plugins", "Remove and locally revoke a locked extension.", vigilcli.AccessWrite, pluginStateWrite, func(inv vigilcli.Invocation) int {
 			return pluginLifecycleCommand(inv.Context, inv.Command, inv.ConfigPath, inv.Args)
 		}),
-		command("plugins:trust-publisher", "Plugins", "Trust an Ed25519 plugin publisher key.", vigilcli.AccessWrite, pluginStateWrite, func(inv vigilcli.Invocation) int {
+		command("plugins:trust-publisher", "Plugins", "Trust an Ed25519 extension publisher key.", vigilcli.AccessWrite, pluginStateWrite, func(inv vigilcli.Invocation) int {
 			return pluginLifecycleCommand(inv.Context, inv.Command, inv.ConfigPath, inv.Args)
 		}),
-		command("plugins:revoke-publisher", "Plugins", "Locally revoke a trusted plugin publisher key.", vigilcli.AccessWrite, pluginStateWrite, func(inv vigilcli.Invocation) int {
+		command("plugins:revoke-publisher", "Plugins", "Locally revoke a trusted extension publisher key.", vigilcli.AccessWrite, pluginStateWrite, func(inv vigilcli.Invocation) int {
 			return pluginLifecycleCommand(inv.Context, inv.Command, inv.ConfigPath, inv.Args)
 		}),
 	}
@@ -370,10 +370,10 @@ func coreCommandSpecs() []vigilcli.Command {
 				"vigil --allow-mutation plugins:conformance --file ./vigil-plugin-example --execute --json",
 			}
 		case "plugins:install":
-			commands[i].Usage = "vigil --allow-mutation plugins:install (--file PATH|--index SOURCE --id ID --version VERSION) [--approve CAPABILITY ...|--approve-all]"
+			commands[i].Usage = "vigil --allow-mutation plugins:install (--file PATH|--index SOURCE --id ID --version VERSION) [--approve ACCESS ...|--approve-all]"
 			commands[i].Examples = []string{"vigil --allow-mutation plugins:install --file ./vigil-plugin-example --approve filesystem:read"}
 		case "plugins:update":
-			commands[i].Usage = "vigil --allow-mutation plugins:update (--file PATH|--index SOURCE --id ID --version VERSION) [--approve CAPABILITY ...|--approve-all]"
+			commands[i].Usage = "vigil --allow-mutation plugins:update (--file PATH|--index SOURCE --id ID --version VERSION) [--approve ACCESS ...|--approve-all]"
 			commands[i].Examples = []string{"vigil --allow-mutation plugins:update --file ./vigil-plugin-example --approve-all"}
 		case "plugins:remove":
 			commands[i].Usage = "vigil --allow-mutation plugins:remove [--version VERSION] [--keep-trust] PLUGIN_ID"
@@ -621,16 +621,16 @@ func commandFlagSpecs(command vigilcli.Command) []vigilcli.Flag {
 		add(vigilcli.Flag{Long: "--provider", Description: "Select the CI provider.", ValueName: "PROVIDER", Values: []string{"github"}})
 		add(vigilcli.Flag{Long: "--write", Description: "Write the generated workflow."})
 	case "plugins:install", "plugins:update":
-		add(vigilcli.Flag{Long: "--file", Description: "Choose a local plugin executable.", ValueName: "PATH", File: true})
+		add(vigilcli.Flag{Long: "--file", Description: "Choose a local extension executable.", ValueName: "PATH", File: true})
 		add(vigilcli.Flag{Long: "--index", Description: "Choose a signed index path or HTTPS URL.", ValueName: "SOURCE", File: true})
-		add(vigilcli.Flag{Long: "--id", Description: "Require an exact plugin id.", ValueName: "PLUGIN_ID"})
+		add(vigilcli.Flag{Long: "--id", Description: "Require an exact extension id.", ValueName: "PLUGIN_ID"})
 		add(vigilcli.Flag{Long: "--version", Description: "Require an exact semantic version.", ValueName: "VERSION"})
 		add(vigilcli.Flag{Long: "--digest", Description: "Require an exact SHA-256 executable digest.", ValueName: "SHA256"})
-		add(vigilcli.Flag{Long: "--approve", Description: "Approve one declared capability.", ValueName: "CAPABILITY", Repeatable: true})
-		add(vigilcli.Flag{Long: "--approve-all", Description: "Approve every declared capability."})
+		add(vigilcli.Flag{Long: "--approve", Description: "Approve one declared access request.", ValueName: "ACCESS", Repeatable: true})
+		add(vigilcli.Flag{Long: "--approve-all", Description: "Approve every declared access request."})
 		add(vigilcli.Flag{Long: "--restore-trust", Description: "Remove a matching local digest revocation."})
 	case "plugins:conformance":
-		add(vigilcli.Flag{Long: "--file", Description: "Choose a local plugin executable.", ValueName: "PATH", File: true})
+		add(vigilcli.Flag{Long: "--file", Description: "Choose a local extension executable.", ValueName: "PATH", File: true})
 		add(vigilcli.Flag{Long: "--execute", Description: "Exercise every declared command in an isolated temporary repository."})
 		add(vigilcli.Flag{Long: "--timeout", Description: "Cap each conformance command execution.", ValueName: "DURATION"})
 	case "plugins:remove":
@@ -655,7 +655,7 @@ func commandArgumentSpecs(name string) []vigilcli.Argument {
 	case "completion":
 		return []vigilcli.Argument{{Name: "SHELL", Description: "Target shell.", Values: []string{"bash", "zsh", "fish"}, Required: true}}
 	case "plugins:remove":
-		return []vigilcli.Argument{{Name: "PLUGIN_ID", Description: "Locked plugin identifier.", Required: true}}
+		return []vigilcli.Argument{{Name: "PLUGIN_ID", Description: "Locked extension identifier.", Required: true}}
 	case "plugins:revoke-publisher":
 		return []vigilcli.Argument{{Name: "KEY_ID", Description: "Trusted publisher key identifier.", Required: true}}
 	default:

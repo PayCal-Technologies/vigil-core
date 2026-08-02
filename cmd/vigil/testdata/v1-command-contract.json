@@ -2345,7 +2345,7 @@
         },
         {
           "long": "--approve",
-          "value_name": "CAPABILITY",
+          "value_name": "ACCESS",
           "repeatable": true
         },
         {
@@ -2370,7 +2370,7 @@
       "interactive": false,
       "write_flags": [],
       "read_only_flags": [],
-      "usage": "vigil --allow-mutation plugins:install (--file PATH|--index SOURCE --id ID --version VERSION) [--approve CAPABILITY ...|--approve-all]",
+      "usage": "vigil --allow-mutation plugins:install (--file PATH|--index SOURCE --id ID --version VERSION) [--approve ACCESS ...|--approve-all]",
       "auto_enabled": false
     },
     {
@@ -2600,7 +2600,7 @@
         },
         {
           "long": "--approve",
-          "value_name": "CAPABILITY",
+          "value_name": "ACCESS",
           "repeatable": true
         },
         {
@@ -2625,7 +2625,7 @@
       "interactive": false,
       "write_flags": [],
       "read_only_flags": [],
-      "usage": "vigil --allow-mutation plugins:update (--file PATH|--index SOURCE --id ID --version VERSION) [--approve CAPABILITY ...|--approve-all]",
+      "usage": "vigil --allow-mutation plugins:update (--file PATH|--index SOURCE --id ID --version VERSION) [--approve ACCESS ...|--approve-all]",
       "auto_enabled": false
     },
     {
