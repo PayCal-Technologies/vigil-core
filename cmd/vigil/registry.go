@@ -162,7 +162,7 @@ func coreCommandSpecs() []vigilcli.Command {
 		command("next", "Core", "Prioritize next local setup and verification actions.", vigilcli.AccessRead, fsRead, func(inv vigilcli.Invocation) int {
 			return next(inv.ConfigPath, inv.Args)
 		}),
-		command("plan", "Core", "Create a digest-bound plan for configured local checks.", vigilcli.AccessConditionalWrite, planCapabilities, func(inv vigilcli.Invocation) int {
+		command("plan", "Core", "Create a reviewed plan for configured local checks.", vigilcli.AccessConditionalWrite, planCapabilities, func(inv vigilcli.Invocation) int {
 			return plan(inv.ConfigPath, inv.Args, inv.AllowMutation)
 		}),
 		command("apply", "Core", "Verify and execute an unchanged reviewed plan.", vigilcli.AccessWrite, workflowCapabilities, func(inv vigilcli.Invocation) int {

@@ -386,7 +386,7 @@ func mutationRequirementsSatisfied(configPath string, command string, confirmati
 	}
 	cfg, path, err := loadConfig(configPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s clean-config required before mutation: %s: %v\n", statusLabel("fail"), path, err)
+		fmt.Fprintf(os.Stderr, "%s configuration must be valid before this command can write files: %s: %v\n", statusLabel("fail"), path, err)
 		return false
 	}
 	requirements := cfg.Coordination.MutationRequires
@@ -397,21 +397,21 @@ func mutationRequirementsSatisfied(configPath string, command string, confirmati
 		switch strings.TrimSpace(requirement) {
 		case "", "explicit-confirmation":
 			if !confirmation.AllowMutation && !confirmation.Auto {
-				fmt.Fprintf(os.Stderr, "%s explicit-confirmation required before mutation\n", statusLabel("fail"))
+				fmt.Fprintf(os.Stderr, "%s explicit approval is required before this command can write files\n", statusLabel("fail"))
 				return false
 			}
 		case "clean-config":
 
 		case "clean-tree":
 			if snapshot, ok := gitMutationFingerprint(); !ok {
-				fmt.Fprintf(os.Stderr, "%s clean-tree required but git fingerprint failed\n", statusLabel("fail"))
+				fmt.Fprintf(os.Stderr, "%s a clean Git tree is required, but Vigil could not inspect Git state\n", statusLabel("fail"))
 				return false
 			} else if !snapshot.Clean {
-				fmt.Fprintf(os.Stderr, "%s clean-tree required before mutation\n", statusLabel("fail"))
+				fmt.Fprintf(os.Stderr, "%s a clean Git tree is required before this command can write files\n", statusLabel("fail"))
 				return false
 			}
 		default:
-			fmt.Fprintf(os.Stderr, "%s unsupported mutation requirement: %s\n", statusLabel("fail"), requirement)
+			fmt.Fprintf(os.Stderr, "%s unsupported write-safety requirement: %s\n", statusLabel("fail"), requirement)
 			return false
 		}
 	}
@@ -430,9 +430,9 @@ func hasFlag(args []string, name string) bool {
 }
 
 func mutationConfirmationError(command string, confirmation confirmationArgs) int {
-	fmt.Fprintf(os.Stderr, "%s mutation confirmation required for %s\n", statusLabel("fail"), command)
+	fmt.Fprintf(os.Stderr, "%s write approval required for %s\n", statusLabel("fail"), command)
 	if autoEnabledCommand(command) {
-		fmt.Fprintf(os.Stderr, "rerun with --auto for deterministic, idempotent repair or --allow-mutation for explicit write confirmation\n")
+		fmt.Fprintf(os.Stderr, "rerun with --auto for deterministic repair or --allow-mutation for explicit write approval\n")
 	} else if confirmation.Auto {
 		fmt.Fprintf(os.Stderr, "--auto is not available for %s; rerun with --allow-mutation after review\n", command)
 	} else {

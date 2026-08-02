@@ -120,23 +120,23 @@ func pluginListOrDoctor(ctx context.Context, command, configPath string, args []
 func pluginInstallOrUpdate(ctx context.Context, command, configPath string, args []string) int {
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	candidate := fs.String("file", "", "local plugin executable")
-	indexSource := fs.String("index", "", "signed plugin index path or HTTPS URL")
-	approveAll := fs.Bool("approve-all", false, "approve every declared capability")
+	candidate := fs.String("file", "", "local extension executable")
+	indexSource := fs.String("index", "", "signed extension index path or HTTPS URL")
+	approveAll := fs.Bool("approve-all", false, "approve every declared access request")
 	restoreTrust := fs.Bool("restore-trust", false, "remove a matching local digest revocation")
-	expectedID := fs.String("id", "", "expected plugin id")
+	expectedID := fs.String("id", "", "expected extension id")
 	expectedVersion := fs.String("version", "", "expected semantic version")
 	expectedDigestValue := fs.String("digest", "", "expected SHA-256 executable digest")
 	jsonOut := fs.Bool("json", false, "json output")
 	var approved pluginCapabilityFlags
-	fs.Var(&approved, "approve", "approve one declared capability (repeatable)")
+	fs.Var(&approved, "approve", "approve one declared access request (repeatable)")
 	if err := fs.Parse(args); err != nil {
 		return exitUsage
 	}
 	localCandidate := strings.TrimSpace(*candidate)
 	indexCandidate := strings.TrimSpace(*indexSource)
 	if fs.NArg() != 0 || (localCandidate == "") == (indexCandidate == "") {
-		fmt.Fprintf(os.Stderr, "Usage: vigil %s (--file PATH|--index PATH_OR_HTTPS_URL --id ID --version VERSION) [--approve CAPABILITY ...|--approve-all]\n", command)
+		fmt.Fprintf(os.Stderr, "Usage: vigil %s (--file PATH|--index PATH_OR_HTTPS_URL --id ID --version VERSION) [--approve ACCESS ...|--approve-all]\n", command)
 		return exitUsage
 	}
 	layout, err := pluginLayoutForConfig(configPath)
