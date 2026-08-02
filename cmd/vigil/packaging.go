@@ -181,9 +181,9 @@ func generateManpage() string {
 	var b strings.Builder
 	info := buildinfo.Current()
 	b.WriteString(".TH VIGIL 1 \"" + buildinfo.ReproducibleDate() + "\" \"vigil " + info.Version + "\" \"User Commands\"\n")
-	b.WriteString(".SH NAME\nvigil \\- policy-aware repository preflight engine\n")
+	b.WriteString(".SH NAME\nvigil \\- check a project before publishing or sharing it\n")
 	b.WriteString(".SH SYNOPSIS\n.B vigil\n[--config PATH] [--allow-mutation|--auto] <command> [args]\n")
-	b.WriteString(".SH DESCRIPTION\nVigil lets humans and coding agents inspect, approve, run, and verify repository automation before that automation changes a project. Read-only verification covers the Git-visible workspace and is not an operating-system sandbox.\n")
+	b.WriteString(".SH DESCRIPTION\nVigil helps people and coding agents see what will run, approve file-changing work, and verify the result before publishing or sharing a project. Read-only checks cover tracked project files and are not an operating-system sandbox.\n")
 	b.WriteString(".SH COMMANDS\n")
 	for _, command := range activeCommands() {
 		b.WriteString(".TP\n.B " + roffEscape(command.Command) + "\n")
@@ -203,9 +203,9 @@ func generateManpage() string {
 			b.WriteString(".br\n" + roffEscape(display) + " \\- " + roffEscape(option.Description) + "\n")
 		}
 	}
-	b.WriteString(".SH REVIEWED PLANS\nUse .B vigil plan --json to inspect a digest-bound plan. Write one with .B vigil --allow-mutation plan --output .vigil/plans/reviewed.json and execute it with .B vigil --allow-mutation apply .vigil/plans/reviewed.json. Apply fails when reviewed inputs changed.\n")
-	b.WriteString(".SH MACHINE OUTPUT\nThe --json compatibility flag emits envelope schema 1. Commands advertise JSONL, JUnit, SARIF, and GitHub annotation support in .B vigil list --json.\n")
-	b.WriteString(".SH SETUP\nRun .B vigil setup:wizard or .B vigil init for guided configuration. Use .B vigil --allow-mutation setup:wizard to permit confirmed writes.\n")
+	b.WriteString(".SH REVIEWED PLANS\nUse .B vigil plan --json to inspect a reviewed plan. Write one with .B vigil --allow-mutation plan --output .vigil/plans/reviewed.json and execute it with .B vigil --allow-mutation apply .vigil/plans/reviewed.json. Apply stops if the reviewed project or setup changed.\n")
+	b.WriteString(".SH STRUCTURED OUTPUT\nThe --json flag prints structured output for tools. Commands advertise JSONL, JUnit, SARIF, and GitHub annotation support in .B vigil list --json.\n")
+	b.WriteString(".SH SETUP\nRun .B vigil setup:wizard or .B vigil init for guided setup. Use .B vigil --allow-mutation setup:wizard to allow confirmed writes.\n")
 	b.WriteString(".SH LICENSE\n0BSD\n")
 	return b.String()
 }

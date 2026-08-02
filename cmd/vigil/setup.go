@@ -206,7 +206,7 @@ func runInteractiveSetupWizard(configPath, requestedProfile string, write bool, 
 			}
 		case wizardGates:
 			fmt.Println()
-			fmt.Println("Select local workflow gates:")
+			fmt.Println("Select project checks:")
 			answers.SelectedGates, control = promptWizardGates(templateConfig(answers.Profile).Gates, answers.SelectedGates)
 			if control == "" {
 				state = wizardHooks
@@ -429,18 +429,18 @@ func setupRestartCommand(answers setupWizardAnswers) string {
 }
 
 func renderSetupReview(answers setupWizardAnswers, write bool) {
-	fmt.Println("Review configuration:")
+	fmt.Println("Review Vigil setup:")
 	fmt.Println()
 	fmt.Printf("  Profile:            %s\n", answers.Profile)
-	fmt.Printf("  Config path:        %s\n", answers.ConfigPath)
-	fmt.Printf("  Gates:              %s\n", gateNames(answers.SelectedGates))
+	fmt.Printf("  Setup file:         %s\n", answers.ConfigPath)
+	fmt.Printf("  Checks:             %s\n", gateNames(answers.SelectedGates))
 	fmt.Printf("  Install hooks:      %s\n", yesNo(answers.InstallHooks))
 	fmt.Printf("  Inspect hooks:      %s\n", yesNo(answers.InspectHooks))
 	fmt.Printf("  Run doctor:         %s\n", yesNo(answers.RunDoctor))
-	fmt.Printf("  Workflow mode:      %s\n", answers.WorkflowMode)
+	fmt.Printf("  First check run:    %s\n", answers.WorkflowMode)
 	if !write {
 		fmt.Println()
-		fmt.Println("Mode: preview. Mutation requires --allow-mutation and --write.")
+		fmt.Println("Mode: preview. Writing the setup file requires --allow-mutation and --write.")
 	}
 }
 

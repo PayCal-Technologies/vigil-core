@@ -196,6 +196,37 @@
       "auto_enabled": false
     },
     {
+      "name": "advanced",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:advanced",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil advanced [--json]",
+      "auto_enabled": false
+    },
+    {
       "name": "apply",
       "aliases": [],
       "access": "write",
@@ -261,6 +292,85 @@
       "write_flags": [],
       "read_only_flags": [],
       "usage": "vigil apply [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "check",
+      "aliases": [],
+      "access": "conditional-write",
+      "capabilities": [
+        "filesystem:read",
+        "filesystem:write",
+        "git:read",
+        "git:write",
+        "network",
+        "process",
+        "environment",
+        "secrets"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--format",
+          "value_name": "FORMAT",
+          "values": [
+            "text",
+            "json",
+            "jsonl",
+            "junit",
+            "github"
+          ]
+        },
+        {
+          "long": "--dry-run"
+        },
+        {
+          "long": "--tag",
+          "value_name": "TAG"
+        },
+        {
+          "long": "--timeout",
+          "value_name": "DURATION"
+        },
+        {
+          "long": "--jobs",
+          "value_name": "N"
+        },
+        {
+          "long": "--artifacts"
+        },
+        {
+          "long": "--artifacts-dir",
+          "value_name": "PATH",
+          "file": true
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:check",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "30m0s",
+      "network": "optional",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json",
+        "jsonl",
+        "junit",
+        "github"
+      ],
+      "interactive": false,
+      "write_flags": [
+        "--allow-mutation",
+        "--artifacts",
+        "--artifacts-dir"
+      ],
+      "read_only_flags": [],
+      "usage": "vigil check [--dry-run] [--tag TAG] [--json|--format FORMAT]",
       "auto_enabled": false
     },
     {
@@ -1250,6 +1360,37 @@
       "auto_enabled": false
     },
     {
+      "name": "fix",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:fix",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil fix [--json]",
+      "auto_enabled": false
+    },
+    {
       "name": "github:init-ci",
       "aliases": [],
       "access": "conditional-write",
@@ -1700,6 +1841,37 @@
       "write_flags": [],
       "read_only_flags": [],
       "usage": "vigil javascript:quality [--json]",
+      "auto_enabled": false
+    },
+    {
+      "name": "learn",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:learn",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil learn [hooks|plans|ci|ai]",
       "auto_enabled": false
     },
     {

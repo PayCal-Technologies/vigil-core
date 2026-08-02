@@ -167,10 +167,45 @@ func statusContext(ctx context.Context, configPath string, args []string) int {
 	if jsonOut {
 		return printStatusJSON(payload, exitCode)
 	}
-	for key, value := range payload {
-		fmt.Printf("%s=%v\n", key, value)
-	}
+	renderStatusSummary(payload)
 	return exitCode
+}
+
+func renderStatusSummary(payload map[string]any) {
+	status, _ := payload["status"].(string)
+	attention := "Ready"
+	if status != "ok" {
+		attention = "Needs attention"
+	}
+	fmt.Printf("Project status: %s\n", attention)
+	fmt.Println()
+	fmt.Printf("Configuration       %s\n", statusReady(payload["config_loaded"] == true))
+	fmt.Printf("Required tools      %s\n", statusReady(status == "ok"))
+	fmt.Printf("Extensions          %s\n", statusReady(payload["extension_status"] == "ok"))
+	fmt.Printf("Plugins             %s\n", statusReady(payload["plugin_status"] == "ok"))
+	if gitRoot, _ := payload["git_root"].(string); strings.TrimSpace(gitRoot) == "" {
+		fmt.Println("Git repository      Not detected")
+	} else {
+		fmt.Println("Git repository      Ready")
+	}
+	fmt.Println()
+	fmt.Println("Recommended next step:")
+	if status == "ok" {
+		fmt.Println("Run `vigil check` before publishing or sharing this project.")
+		return
+	}
+	if payload["config_loaded"] != true {
+		fmt.Println("Run `vigil setup` or `vigil config:validate` and review the configuration issue.")
+		return
+	}
+	fmt.Println("Run `vigil fix` to see safe next actions.")
+}
+
+func statusReady(ready bool) string {
+	if ready {
+		return "Ready"
+	}
+	return "Needs attention"
 }
 
 func pluginHealthCheck(ctx context.Context, configPath, name string) checkResult {

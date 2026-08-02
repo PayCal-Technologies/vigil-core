@@ -34,9 +34,18 @@ func runContext(ctx context.Context, args []string) int {
 	configPath := global.String("config", "", "config file path")
 	help := global.Bool("help", false, "show help")
 	helpShort := global.Bool("h", false, "show help")
+	plain := global.Bool("plain", false, "minimal plain text output")
+	noColor := global.Bool("no-color", false, "disable ANSI color")
 	showVersion := global.Bool("version", false, "show version")
 	if err := global.Parse(args); err != nil {
 		return exitUsage
+	}
+	if *plain {
+		_ = os.Setenv("VIGIL_PLAIN", "1")
+		_ = os.Setenv("NO_COLOR", "1")
+	}
+	if *noColor {
+		_ = os.Setenv("NO_COLOR", "1")
 	}
 	if strings.TrimSpace(*configPath) != "" {
 		_ = os.Setenv("VIGIL_CONFIG", *configPath)
@@ -48,9 +57,13 @@ func runContext(ctx context.Context, args []string) int {
 		rest = append([]string{"help"}, rest...)
 	}
 	if len(rest) == 0 {
-		printHelp()
+		if !fileExists(resolvedConfigPath(*configPath)) {
+			printBeginnerWelcome()
+		} else {
+			printHelp()
+		}
 		if isInteractiveTerminal() {
-			runSetup, control := wizardBool("Run setup wizard now?", false)
+			runSetup, control := wizardBool("Run setup wizard now?", !fileExists(resolvedConfigPath(*configPath)))
 			if control == "quit" {
 				return exitInterrupted
 			}
@@ -203,6 +216,42 @@ func printHelp() {
 			fmt.Printf("  %-3s %-*s   %s\n", compactAccessMarker(command.Access), width, command.Command, compactHelpDescription(command.Description))
 		}
 	}
+}
+
+func printBeginnerWelcome() {
+	fmt.Println("Welcome to Vigil")
+	fmt.Println()
+	fmt.Println("Vigil checks your project before you publish or share it.")
+	fmt.Println()
+	fmt.Println("It can:")
+	fmt.Println("  [OK] detect the kind of project you have")
+	fmt.Println("  [OK] find common tests and quality checks")
+	fmt.Println("  [OK] show what each check will do")
+	fmt.Println("  [OK] warn if a check changes files unexpectedly")
+	fmt.Println("  [OK] explain failures in plain language")
+	fmt.Println()
+	fmt.Println("What would you like to do?")
+	fmt.Println()
+	fmt.Println("  1. Check this project       vigil check")
+	fmt.Println("  2. Set up Vigil             vigil setup")
+	fmt.Println("  3. Learn what Vigil does    vigil learn")
+	fmt.Println("  4. Show advanced commands   vigil advanced")
+}
+
+func printBeginnerHelp() {
+	fmt.Println("Vigil")
+	fmt.Println("Checks a software project before you publish, push, or release it.")
+	fmt.Println()
+	fmt.Println("Common commands:")
+	fmt.Println("  vigil check      Run the normal project checks")
+	fmt.Println("  vigil setup      Set up Vigil with guided questions")
+	fmt.Println("  vigil explain    Show what Vigil will do")
+	fmt.Println("  vigil status     Show whether the project appears ready")
+	fmt.Println("  vigil fix        Suggest safe next actions")
+	fmt.Println("  vigil learn      Learn one feature at a time")
+	fmt.Println("  vigil advanced   Show the complete command interface")
+	fmt.Println()
+	fmt.Println("Most commands do not change files. Commands that write files ask for explicit permission.")
 }
 
 type commandInfo struct {
@@ -396,16 +445,40 @@ func commandHelp(args []string) int {
 	fs := flag.NewFlagSet("help", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	jsonOut := fs.Bool("json", false, "json output")
+	beginner := fs.Bool("beginner", false, "show beginner help")
+	standard := fs.Bool("standard", false, "show standard help")
+	expert := fs.Bool("expert", false, "show expert help")
 	if err := fs.Parse(args); err != nil {
 		return exitUsage
 	}
-	if fs.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "Usage: vigil help [--json] <command>")
+	modes := boolCount(*beginner, *standard, *expert)
+	if modes > 1 {
+		fmt.Fprintln(os.Stderr, "choose only one of --beginner, --standard, or --expert")
 		return exitUsage
 	}
-	manual, ok := manualForCommand(fs.Arg(0))
+	if fs.NArg() == 0 {
+		if *jsonOut {
+			return printJSON(map[string]any{"status": "ok", "commands": activeCommands()})
+		}
+		switch {
+		case *beginner:
+			printBeginnerHelp()
+		default:
+			printHelp()
+		}
+		return exitSuccess
+	}
+	if fs.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "Usage: vigil help [--json] [--beginner|--standard|--expert] [command]")
+		return exitUsage
+	}
+	commandName := fs.Arg(0)
+	if *beginner {
+		return beginnerCommandHelp(commandName, *jsonOut)
+	}
+	manual, ok := manualForCommand(commandName)
 	if !ok {
-		fmt.Fprintf(os.Stderr, "unknown command: %s\n", fs.Arg(0))
+		fmt.Fprintf(os.Stderr, "unknown command: %s\n", commandName)
 		return exitUsage
 	}
 	if *jsonOut {
@@ -423,6 +496,16 @@ func commandHelp(args []string) int {
 		fmt.Printf("  example: %s\n", example)
 	}
 	return exitSuccess
+}
+
+func boolCount(values ...bool) int {
+	count := 0
+	for _, value := range values {
+		if value {
+			count++
+		}
+	}
+	return count
 }
 
 func manualForCommand(name string) (commandManual, bool) {
@@ -466,8 +549,11 @@ func explain(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return exitUsage
 	}
+	if fs.NArg() == 0 {
+		return explainProject(*jsonOut)
+	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "Usage: vigil explain [--json] <command>")
+		fmt.Fprintln(os.Stderr, "Usage: vigil explain [--json] [command]")
 		return exitUsage
 	}
 	name := fs.Arg(0)

@@ -24,6 +24,8 @@ release provenance.
 Vigil is designed to reduce:
 
 - accidental execution of mutating automation;
+- accidental and over-broad automation whose real behavior exceeds the reviewed
+  command contract;
 - shell interpretation when argv execution is sufficient;
 - hanging or orphaned child processes;
 - repository mutation by a gate declared read-only;
@@ -60,9 +62,11 @@ path. Release assets are checksummed, signed or attested, and tested after
 publication. Support bundles never upload automatically. Plugins use a
 versioned subprocess protocol, exact executable and metadata digests, local
 trust and revocation records, capability approval, bounded output, timeout, and
-cancellation. Signed acquisition adds expiring threshold-signed Ed25519 indexes,
-HTTPS downgrade prevention, exact platform size/digest verification, and
-publisher revocation. These controls do not claim operating-system sandboxing.
+cancellation. Capability approval is policy metadata and a local trust decision,
+not process confinement. Signed acquisition adds expiring threshold-signed
+Ed25519 indexes, HTTPS downgrade prevention, exact platform size/digest
+verification, and publisher revocation. These controls do not claim
+operating-system sandboxing.
 Publisher-side private keys are handled only by the separate offline utility,
 which rejects symlinks and permissive key modes, never overwrites outputs, and
 supports independent public-key verification. Key custody and endpoint

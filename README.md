@@ -5,9 +5,9 @@
 [![GitHub release](https://img.shields.io/github/v/release/PayCal-Technologies/vigil-public?include_prereleases)](https://github.com/PayCal-Technologies/vigil-public/releases)
 [![License: 0BSD](https://img.shields.io/badge/license-0BSD-blue.svg)](LICENSE)
 
-Vigil is a policy-aware repository preflight engine. It lets humans and coding
-agents inspect, approve, run, and verify automation before that automation
-changes a project.
+Vigil checks a software project before you publish, push, or hand it off. It
+helps people and coding agents see what will run, approve file-changing work,
+and verify the result.
 
 Vigil's core job is to answer:
 
@@ -15,10 +15,17 @@ Vigil's core job is to answer:
 2. Why will it run?
 3. What can it access or change?
 4. What result did it produce?
-5. Did a command violate its declared repository-mutation boundary?
+5. Did a command change files it said it would not change?
 
 Vigil is not a hosted CI service, deployment orchestrator, secrets manager, or
 operating-system sandbox.
+
+Vigil is aimed first at accidental and over-broad automation: commands that run
+more than intended, write files they said they would not write, or run after the
+project changed. Its access information is for review and policy decisions, not
+kernel-level confinement. Approved commands and plugins still run as the user,
+so Vigil makes those boundaries visible instead of implying a sandbox it does
+not provide.
 
 > `main` documents the upcoming v0.2 beta. Some commands, archive contents,
 > release guarantees, and plugin/distribution workflows are not available in
@@ -33,8 +40,8 @@ The standalone binary provides:
   manpages;
 - direct argv execution by default, with explicit shell opt-in;
 - process timeouts, cancellation, signal handling, and stable execution states;
-- Git-visible mutation detection for checks declared read-only;
-- digest-bound reviewed plans that fail closed when execution inputs change;
+- detection when read-only checks change tracked project files;
+- reviewed plans that stop when the project or setup changed after review;
 - a versioned machine envelope plus JSONL, JUnit, SARIF, and GitHub adapters;
 - safe setup, hook, support-bundle, and workflow commands;
 - bounded CI fuzz targets for config, manifests, argv, paths, atomic writes,
@@ -133,37 +140,51 @@ The commands in this section require `main` or `v0.2.0-beta.1` and later.
 They are not fully available in the legacy `v0.1.0` tagged release.
 
 ```bash
-vigil init
+vigil
+vigil setup
+vigil explain
+vigil check
+vigil status
+vigil learn hooks
+```
+
+Running `vigil` without a command shows a beginner welcome when no configuration
+exists and, on an interactive terminal, offers guided setup. `vigil check` runs
+the same configured local workflow as `vigil workflow:local`; it is a simpler
+entry point, not a separate engine.
+
+For reviewed-plan execution and CI-oriented workflows:
+
+```bash
 vigil config:validate
 vigil --allow-mutation plan --output .vigil/plans/reviewed.json
 vigil --allow-mutation apply .vigil/plans/reviewed.json
 vigil workflow:local --dry-run
-vigil workflow:local
 vigil verify --json
 ```
-
-Running `vigil` without a command prints help and, on an interactive terminal,
-offers guided setup.
 
 Common compatibility aliases remain available:
 
 | Simple command | Compatibility or advanced command |
 | --- | --- |
+| `vigil check` | `vigil workflow:local` |
+| `vigil fix` | `vigil self-heal:plan` |
+| `vigil advanced` | complete command interface |
 | `vigil init` | `vigil setup:wizard` |
 | `vigil list` | `vigil commands` |
-| `vigil plan` | digest-bound configured workflow plan |
+| `vigil plan` | reviewed check plan |
 | `vigil apply` | execute an unchanged reviewed plan |
-| `vigil extensions:list` | list loaded packs |
-| `vigil extensions:doctor` | validate loaded packs |
-| `vigil plugins:list` | list locked executable plugins |
+| `vigil extensions:list` | list loaded feature collections |
+| `vigil extensions:doctor` | validate loaded feature collections |
+| `vigil plugins:list` | list installed executable extensions |
 | `vigil plugins:doctor` | verify plugin identity, trust, and compatibility |
 
-The `extensions:*` names are retained for compatibility. Pack manifests remain
-declarative; executable plugins have a separate lifecycle and protocol.
+The `extensions:*` names are retained for compatibility. Feature collections are
+metadata; executable plugins have a separate lifecycle and protocol.
 
 ## Execution Model
 
-Schema 3 gates execute an executable and argv directly:
+In schema 3, each configured check names an executable and its arguments:
 
 ```json
 {
@@ -188,7 +209,7 @@ Shell syntax is explicit:
 }
 ```
 
-Gates may form a dependency graph and opt into bounded parallel execution:
+Checks can depend on other checks and can opt into limited parallel execution:
 
 ```json
 {
@@ -211,15 +232,15 @@ Gates may form a dependency graph and opt into bounded parallel execution:
 }
 ```
 
-Ungrouped gates remain sequential. Only explicit read-only groups run
-concurrently, bounded by `--jobs`; tag filtering includes transitive
-dependencies. See the [workflow graph contract](docs/concepts/workflow-graph.md).
+Ungrouped checks run one after another. Only explicit read-only groups run at
+the same time, bounded by `--jobs`; tag filtering includes required dependency
+checks. See the [workflow graph contract](docs/concepts/workflow-graph.md).
 
 Vigil streams human-facing output and retains bounded structured summaries.
-Each process has a default or per-gate timeout. Ctrl+C and SIGTERM cancel the
+Each process has a default or per-check timeout. Ctrl+C and SIGTERM cancel the
 active process group.
 
-Durable local evidence is opt-in because writing logs is itself a mutation:
+Saved local reports and logs are opt-in because writing them changes files:
 
 ```bash
 vigil --allow-mutation workflow:local --artifacts
@@ -227,16 +248,15 @@ vigil --allow-mutation workflow:local --artifacts
 
 The default ignored root is `.vigil/runs/<run-id>/`. It contains a mode-`0600`
 `manifest.json`, digest-bearing `plan.json`, `result.json`, and separate
-mode-`0600` stdout/stderr logs per gate. The manifest follows
+mode-`0600` stdout/stderr logs per check. The manifest follows
 `schemas/vigil-run-artifact-manifest-v1.schema.json` and records the run ID,
 standard file names, and log budgets. Each stream log is capped at 64 MiB and
 ends with `[truncated]` if that bound is reached. The complete run shares a 512
-MiB log budget; Vigil fails closed before opening a stream when it cannot
-reserve a truncation marker. Structured gate results expose summary and log
-truncation flags. A custom
-in-repository artifact root must be Git-ignored; paths outside the repository
-are allowed explicitly. Symlink redirection and paths inside Git metadata are
-rejected.
+MiB log budget; Vigil stops before opening a stream when it cannot reserve room
+to mark truncation. Structured check results expose summary and log truncation
+flags. A custom in-repository reports/logs directory must be Git-ignored; paths
+outside the repository are allowed explicitly. Symlink redirection and paths
+inside Git metadata are rejected.
 
 For review-separated execution:
 
@@ -245,8 +265,9 @@ vigil --allow-mutation plan --output .vigil/plans/reviewed.json
 vigil --allow-mutation apply .vigil/plans/reviewed.json
 ```
 
-`apply` refuses the plan if the config, repository `HEAD`, Git-visible
-workspace, active registry, packs, or Vigil executable changed after review.
+`apply` refuses the plan if the setup file, repository `HEAD`, tracked
+workspace, active command list, feature collections, or Vigil executable changed
+after review.
 See [reviewed plans](docs/concepts/plans.md).
 
 Execution states are:
@@ -265,25 +286,28 @@ internal_error
 
 ## Safety Model
 
-`read_only` means the command is expected not to alter the Git-visible
-repository workspace. Vigil compares repository fingerprints before and after
-the command and reports `mutation_detected` when they differ.
+`read_only` means the command is expected not to alter tracked project files.
+Vigil compares project snapshots before and after the command and reports
+`mutation_detected` when they differ. This is designed for the everyday failure
+mode of accidental and over-broad automation.
 
 It does **not** provide operating-system sandboxing. A command may still affect
 the network, databases, user caches, ignored files, files outside the
-repository, credential stores, or external services. Inspect command
-capabilities with:
+repository, credential stores, or external services. Capability declarations
+are review and policy inputs; they do not confine an approved executable.
+Inspect command access details with:
 
 ```bash
 vigil explain workflow:local --json
 vigil list --json
 ```
 
-Commands declare access, capabilities, implementation binding, host API,
-timeout, network behavior, required tools, stability, and output formats in one
-registry. Unknown or incomplete executable command definitions fail closed.
+Commands declare access, implementation binding, host API, timeout, network
+behavior, required tools, stability, output formats, and what they can access in
+one command list. Unknown or incomplete executable command definitions stop
+rather than run with guessed behavior.
 
-Mutation is authorized at the CLI boundary:
+File-changing work is authorized at the CLI boundary:
 
 ```bash
 vigil github:init-ci
@@ -297,9 +321,9 @@ Canonical access values are:
 
 | Access | Help | Meaning |
 | --- | --- | --- |
-| `read` | `r` | No declared repository or external mutation. |
-| `write` | `w` | Mutates unless an explicit read-only flag is active. |
-| `conditional-write` | `r/w` | Read-only by default; registered flags activate mutation. |
+| `read` | `r` | No declared project or external file change. |
+| `write` | `w` | Writes unless an explicit read-only flag is active. |
+| `conditional-write` | `r/w` | Read-only by default; registered flags activate writes. |
 
 ## Configuration
 
@@ -317,41 +341,42 @@ vigil --allow-mutation config:migrate --write
 
 The current config schema is `3`. Migration preserves unknown top-level and
 nested fields, refuses to downgrade future schemas, converts legacy command
-strings to argv where safe, and marks shell-dependent legacy gates explicitly.
+strings to argv where safe, and marks shell-dependent legacy checks explicitly.
 
 See [config schema](docs/reference/config-schema.md) and
 [compatibility policy](docs/compatibility.md).
 
-## Packs
+## Feature Collections
 
 Vigil distinguishes:
 
 - **Built-in module**: Go implementation compiled into Vigil.
-- **Pack**: declarative metadata that groups and governs built-in or future
-  declarative commands.
+- **Feature collection**: metadata that groups and governs built-in or future
+  declarative commands. The historical command name is `extensions:*`.
 - **Plugin**: a separately installed executable using subprocess protocol `1`,
-  a digest-bound repository lock, and local capability trust.
+  an exact repository lock, and local access approval.
 
-Official pack manifests are embedded in the binary. Loading precedence is:
+Official feature collection manifests are embedded in the binary. Loading
+precedence is:
 
 ```text
 core < embedded official < user < repository
 ```
 
-User packs live under the platform config directory at `vigil/packs`, or at
-`VIGIL_USER_PACK_ROOT`. Repository packs use the configured `manifest_root`.
-Overrides are reported by `extensions:doctor`; disabled IDs, kind policy,
-privacy policy, duplicate IDs or commands, traversal, and symlink escapes are
-enforced.
+User feature collections live under the platform config directory at
+`vigil/packs`, or at `VIGIL_USER_PACK_ROOT`. Repository feature collections use
+the configured `manifest_root`. Overrides are reported by `extensions:doctor`;
+disabled IDs, kind policy, privacy policy, duplicate IDs or commands,
+traversal, and symlink escapes are enforced.
 
 ```bash
 vigil extensions:list --json
 vigil extensions:doctor --json
 ```
 
-Official packs cover accessibility, dependency checks, deployment verification,
-file iteration, GitHub CI generation, release policy, repository health,
-Scribe, security adapters, and test adapters.
+Official feature collections cover accessibility, dependency checks, deployment
+verification, file iteration, GitHub CI generation, release policy, repository
+health, Scribe, security adapters, and test adapters.
 
 ## Plugins
 

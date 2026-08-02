@@ -20,50 +20,50 @@ before authorizing `config:migrate --write` or `config:repair`.
 Migration and repair create exact timestamped `.bak-*` files. Follow
 [Upgrade and Rollback](upgrading.md); do not edit the backup in place.
 
-## Reviewed Plan Is Stale
+## Reviewed Plan No Longer Matches
 
-`apply` compares the binary, config, repository root and `HEAD`, Git-visible
-workspace, command registry, and pack digests. Any mismatch intentionally
-invalidates the plan. Restore the reviewed inputs or generate and review a new
-plan; never patch `plan_id`.
+`apply` checks that the Vigil binary, setup file, repository, command list, and
+built-in feature collections still match what you reviewed. If any of those
+changed, Vigil stops on purpose. Restore the reviewed state or generate and
+review a new plan; never patch `plan_id`.
 
-## Read-Only Gate Reports Mutation
+## Read-Only Check Changed Files
 
-Inspect `manifest.json`, the gate's stdout/stderr logs, and optional mutation
-diff under the private run directory. Parallel batches mark every peer because
-attribution is unsafe. Generated JUnit/SARIF files must be intentionally ignored
-or the gate must be classified as mutating.
+Inspect `manifest.json`, the check's stdout/stderr logs, and the optional file
+change diff under the private run directory. Parallel batches mark every peer
+because Vigil cannot safely tell which one made the change. Generated JUnit or
+SARIF files must be intentionally ignored, or the check must be marked as a
+file-changing check.
 
 Remember that ignored files, user caches, network calls, databases, and external
-services are outside the Git-visible fingerprint.
+services are outside the tracked project snapshot.
 
-## Fingerprint Is Unavailable
+## Project Snapshot Is Unavailable
 
 Confirm the command is inside a valid Git worktree and that Git status/diff
-commands succeed. Fingerprinting blocks above 100,000 untracked files or 2 GiB
-of untracked content and rejects non-regular paths returned by Git. Clean or
-ignore generated content after review; do not weaken the gate to bypass a
-limit.
+commands succeed. Snapshotting blocks above 100,000 untracked files or 2 GiB of
+untracked content and rejects non-regular paths returned by Git. Clean or ignore
+generated content after review; do not weaken the check to bypass a limit.
 
 ## Tool or Shell Is Missing
 
 A required executable returns exit code `4`. Install the declared tool or mark
-the gate `required: false` only when skipping it is an accepted repository
+the check `required: false` only when skipping it is an accepted repository
 policy. Optional status applies only to a missing executable; command failures
 still fail.
 
-Shell gates explicitly require Bash. Prefer argv gates where shell syntax is
+Shell checks explicitly require Bash. Prefer argv checks where shell syntax is
 not needed.
 
-## Pack Is Missing or Broken
+## Built-In Feature Collection Is Missing or Broken
 
 Run `extensions:list --json` and `extensions:doctor --json`. Inspect layer
 origin, override evidence, host API, command contract completeness, allowed
 kinds, enabled/disabled IDs, and repository confinement. A layer is limited to
 1,024 entries and a manifest to 1 MiB.
 
-Released binaries always contain the official embedded packs. Empty-directory
-output should therefore still list those packs.
+Released binaries always contain the official built-in feature collections.
+Empty-directory output should therefore still list those collections.
 
 ## Plugin Is Blocked
 

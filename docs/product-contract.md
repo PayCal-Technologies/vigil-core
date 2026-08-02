@@ -33,6 +33,13 @@ Vigil does not claim:
 - that a JSON manifest alone is an executable plugin;
 - to safely execute an unknown command whose access or binding is missing.
 
+Vigil is primarily designed to reduce accidental and over-broad automation:
+commands that run more than expected, write files they were declared not to
+write, or execute after the reviewed repository state has changed. Access and
+capability declarations are contracts for review, policy enforcement, and
+fail-closed behavior. They are not kernel-level confinement, and an approved
+command or plugin still runs with the user's operating-system identity.
+
 ## Runtime Vocabulary
 
 - **Built-in module**: implementation compiled into the Vigil binary.
@@ -53,7 +60,8 @@ packs, not executable plugins.
   fails closed.
 - **VIGIL-SI-02**: Mutation requires an explicit reviewed activation path.
 - **VIGIL-SI-03**: A read-only declaration is verified against repository
-  mutation fingerprints, but is not described as an OS sandbox.
+  mutation fingerprints, but is not described as an OS sandbox. Capability
+  metadata is used for policy and review, not process confinement.
 - **VIGIL-SI-04**: Official, user, and repository packs have deterministic
   precedence: `core < embedded official < user < repository`.
 - **VIGIL-SI-05**: Repository and user pack discovery cannot escape its

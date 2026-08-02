@@ -128,14 +128,14 @@ func coreCommandSpecs() []vigilcli.Command {
 	}
 
 	commands := []vigilcli.Command{
-		command("help", "Core", "Show command help and contracts.", vigilcli.AccessRead, fsRead, func(inv vigilcli.Invocation) int {
+		command("help", "Core", "Show command help.", vigilcli.AccessRead, fsRead, func(inv vigilcli.Invocation) int {
 			if len(inv.Args) > 0 {
 				return commandHelp(inv.Args)
 			}
 			printHelp()
 			return exitSuccess
 		}),
-		command("list", "Core", "List core and loaded pack commands.", vigilcli.AccessRead, fsRead, func(inv vigilcli.Invocation) int {
+		command("list", "Core", "List available commands.", vigilcli.AccessRead, fsRead, func(inv vigilcli.Invocation) int {
 			return listCommands(inv.Args)
 		}),
 		command("version", "Core", "Print Vigil version and build metadata.", vigilcli.AccessRead, fsRead, func(inv vigilcli.Invocation) int {
@@ -144,8 +144,20 @@ func coreCommandSpecs() []vigilcli.Command {
 		command("doctor", "Core", "Check local readiness for using Vigil.", vigilcli.AccessRead, process, func(inv vigilcli.Invocation) int {
 			return doctorContext(inv.Context, inv.ConfigPath, inv.Args)
 		}),
-		command("status", "Core", "Summarize config, pack, Git, and command readiness.", vigilcli.AccessRead, process, func(inv vigilcli.Invocation) int {
+		command("status", "Core", "Show whether the project appears ready.", vigilcli.AccessRead, process, func(inv vigilcli.Invocation) int {
 			return statusContext(inv.Context, inv.ConfigPath, inv.Args)
+		}),
+		command("check", "Core", "Run the normal project checks.", vigilcli.AccessConditionalWrite, workflowCapabilities, func(inv vigilcli.Invocation) int {
+			return beginnerCheckContext(inv.Context, inv.ConfigPath, inv.Args, inv.AllowMutation)
+		}),
+		command("fix", "Core", "Suggest safe next actions.", vigilcli.AccessRead, fsRead, func(inv vigilcli.Invocation) int {
+			return beginnerFix(inv.ConfigPath, inv.Args)
+		}),
+		command("learn", "Core", "Learn one Vigil feature at a time.", vigilcli.AccessRead, fsRead, func(inv vigilcli.Invocation) int {
+			return beginnerLearn(inv.Args)
+		}),
+		command("advanced", "Core", "Show every command and advanced option.", vigilcli.AccessRead, fsRead, func(inv vigilcli.Invocation) int {
+			return advancedCommand(inv.Args)
 		}),
 		command("next", "Core", "Prioritize next local setup and verification actions.", vigilcli.AccessRead, fsRead, func(inv vigilcli.Invocation) int {
 			return next(inv.ConfigPath, inv.Args)
@@ -308,6 +320,10 @@ func coreCommandSpecs() []vigilcli.Command {
 			commands[i].WriteFlags = []string{"--allow-mutation", "--artifacts", "--artifacts-dir"}
 			commands[i].Timeout = 30 * time.Minute
 			commands[i].Network = "optional"
+		case "check":
+			commands[i].WriteFlags = []string{"--allow-mutation", "--artifacts", "--artifacts-dir"}
+			commands[i].Timeout = 30 * time.Minute
+			commands[i].Network = "optional"
 		case "plan":
 			commands[i].WriteFlags = []string{"--output"}
 			commands[i].RequiredTools = []string{"git"}
@@ -329,6 +345,18 @@ func coreCommandSpecs() []vigilcli.Command {
 			commands[i].Interactive = true
 		}
 		switch commands[i].Name {
+		case "check":
+			commands[i].Usage = "vigil check [--dry-run] [--tag TAG] [--json|--format FORMAT]"
+			commands[i].Examples = []string{"vigil check", "vigil check --dry-run"}
+		case "fix":
+			commands[i].Usage = "vigil fix [--json]"
+			commands[i].Examples = []string{"vigil fix"}
+		case "learn":
+			commands[i].Usage = "vigil learn [hooks|plans|ci|ai]"
+			commands[i].Examples = []string{"vigil learn", "vigil learn hooks"}
+		case "advanced":
+			commands[i].Usage = "vigil advanced [--json]"
+			commands[i].Examples = []string{"vigil advanced"}
 		case "plugins:list":
 			commands[i].Usage = "vigil plugins:list [--json]"
 			commands[i].Examples = []string{"vigil plugins:list --json"}
@@ -521,7 +549,7 @@ func commandOutputFormats(name string) []string {
 		return []string{"roff"}
 	case "hooks:install", "hooks:pre-commit", "hooks:pre-push", "manpage:install":
 		return []string{"text"}
-	case "workflow:local", "apply":
+	case "check", "workflow:local", "apply":
 		return []string{"text", "json", "jsonl", "junit", "github"}
 	case "doctor", "verify":
 		return []string{"text", "json", "jsonl", "junit", "github"}
@@ -546,19 +574,19 @@ func commandFlagSpecs(command vigilcli.Command) []vigilcli.Flag {
 	case "plan":
 		add(vigilcli.Flag{Long: "--output", Description: "Write a private reviewed plan.", ValueName: "PATH", File: true})
 		add(vigilcli.Flag{Long: "--force", Description: "Replace an existing plan after review."})
-		add(vigilcli.Flag{Long: "--tag", Description: "Include gates matching a tag.", ValueName: "TAG"})
-		add(vigilcli.Flag{Long: "--timeout", Description: "Set the default gate timeout.", ValueName: "DURATION"})
-		add(vigilcli.Flag{Long: "--jobs", Description: "Bound explicit parallel groups.", ValueName: "N"})
+		add(vigilcli.Flag{Long: "--tag", Description: "Include checks matching a tag.", ValueName: "TAG"})
+		add(vigilcli.Flag{Long: "--timeout", Description: "Set the default check timeout.", ValueName: "DURATION"})
+		add(vigilcli.Flag{Long: "--jobs", Description: "Limit checks that are allowed to run at the same time.", ValueName: "N"})
 	case "apply":
-		add(vigilcli.Flag{Long: "--artifacts", Description: "Write private run artifacts."})
-		add(vigilcli.Flag{Long: "--artifacts-dir", Description: "Choose the private artifact root.", ValueName: "PATH", File: true})
-	case "workflow:local":
-		add(vigilcli.Flag{Long: "--dry-run", Description: "Show planned gates without executing them."})
-		add(vigilcli.Flag{Long: "--tag", Description: "Run gates matching a tag.", ValueName: "TAG"})
-		add(vigilcli.Flag{Long: "--timeout", Description: "Set the default gate timeout.", ValueName: "DURATION"})
-		add(vigilcli.Flag{Long: "--jobs", Description: "Bound explicit parallel groups.", ValueName: "N"})
-		add(vigilcli.Flag{Long: "--artifacts", Description: "Write private run artifacts."})
-		add(vigilcli.Flag{Long: "--artifacts-dir", Description: "Choose the private artifact root.", ValueName: "PATH", File: true})
+		add(vigilcli.Flag{Long: "--artifacts", Description: "Write private run reports and logs."})
+		add(vigilcli.Flag{Long: "--artifacts-dir", Description: "Choose where private run reports and logs are written.", ValueName: "PATH", File: true})
+	case "check", "workflow:local":
+		add(vigilcli.Flag{Long: "--dry-run", Description: "Show planned checks without running them."})
+		add(vigilcli.Flag{Long: "--tag", Description: "Run checks matching a tag.", ValueName: "TAG"})
+		add(vigilcli.Flag{Long: "--timeout", Description: "Set the default check timeout.", ValueName: "DURATION"})
+		add(vigilcli.Flag{Long: "--jobs", Description: "Limit checks that are allowed to run at the same time.", ValueName: "N"})
+		add(vigilcli.Flag{Long: "--artifacts", Description: "Write private run reports and logs."})
+		add(vigilcli.Flag{Long: "--artifacts-dir", Description: "Choose where private run reports and logs are written.", ValueName: "PATH", File: true})
 	case "config:init":
 		add(vigilcli.Flag{Long: "--profile", Description: "Select the starter profile.", ValueName: "PROFILE", Values: profileNames()})
 		add(vigilcli.Flag{Long: "--write", Description: "Write the generated configuration."})
@@ -679,7 +707,7 @@ func packCommandArgumentSpecs(name string) []vigilcli.Argument {
 func outputFlagSpecs(formats []string) []vigilcli.Flag {
 	var flags []vigilcli.Flag
 	if sliceContains(formats, "json") {
-		flags = append(flags, vigilcli.Flag{Long: "--json", Description: "Emit the versioned JSON envelope."})
+		flags = append(flags, vigilcli.Flag{Long: "--json", Description: "Print structured JSON output."})
 	}
 	if len(formats) > 2 || (len(formats) == 2 && !sliceContains(formats, "json")) {
 		flags = append(flags, vigilcli.Flag{
@@ -701,7 +729,7 @@ func globalFlagSpecs() []vigilcli.Flag {
 		{Long: "--config", Description: "Use a specific Vigil configuration file.", ValueName: "PATH", File: true},
 		{Long: "--help", Short: "-h", Description: "Show command help."},
 		{Long: "--version", Description: "Show build and compatibility metadata."},
-		{Long: "--allow-mutation", Description: "Authorize the reviewed mutation path."},
+		{Long: "--allow-mutation", Description: "Allow a reviewed command to write files."},
 		{Long: "--auto", Description: "Authorize supported deterministic repairs."},
 	}
 }

@@ -2622,7 +2622,7 @@ func TestInteractiveSetupWizardDryRunUsesInjectedInput(t *testing.T) {
 			t.Fatalf("wizard dry-run exit = %d", code)
 		}
 	})
-	if !strings.Contains(output, "Vigil Setup Wizard") || !strings.Contains(output, "Review configuration") {
+	if !strings.Contains(output, "Vigil Setup Wizard") || !strings.Contains(output, "Review Vigil setup") {
 		t.Fatalf("wizard output missing expected sections:\n%s", output)
 	}
 	if fileExists(defaultConfigName) {
@@ -2651,7 +2651,7 @@ func TestInteractiveSetupWizardBackReturnsToPreviousStep(t *testing.T) {
 			t.Fatalf("wizard dry-run exit = %d", code)
 		}
 	})
-	if strings.Count(output, "Select local workflow gates:") != 2 {
+	if strings.Count(output, "Select project checks:") != 2 {
 		t.Fatalf("back did not revisit gate step:\n%s", output)
 	}
 	if strings.Contains(output, "restarting the current wizard") {
@@ -2706,6 +2706,111 @@ func TestHelpCategoriesPutSetupLast(t *testing.T) {
 	}
 	if strings.Contains(output[setupIndex+1:], "\ncore\n") {
 		t.Fatalf("setup was not the final category:\n%s", output)
+	}
+}
+
+func TestBeginnerCommandsAreRegistryBacked(t *testing.T) {
+	registry, err := newCommandRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"check", "fix", "learn", "advanced"} {
+		command, ok := registry.Resolve(name)
+		if !ok {
+			t.Fatalf("beginner command %s missing", name)
+		}
+		if command.Binding != "builtin:"+name {
+			t.Fatalf("%s binding = %q", name, command.Binding)
+		}
+	}
+	check, _ := registry.Resolve("check")
+	workflow, _ := registry.Resolve("workflow:local")
+	if check.Access != workflow.Access || check.Network != workflow.Network || check.Timeout != workflow.Timeout {
+		t.Fatalf("check command drifted from workflow:local metadata: check=%#v workflow=%#v", check, workflow)
+	}
+}
+
+func TestBeginnerHelpUsesPlainTerminology(t *testing.T) {
+	output := captureStdout(t, func() {
+		if code := commandHelp([]string{"--beginner", "plan"}); code != 0 {
+			t.Fatalf("help exit = %d", code)
+		}
+	})
+	if strings.Contains(output, "digest-bound") || strings.Contains(output, "mutation") {
+		t.Fatalf("beginner help leaked internal terminology:\n%s", output)
+	}
+	for _, want := range []string{"reviewed plan", "changes:", "network:", "next:"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("beginner help missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestCheckWithoutConfigExplainsSetup(t *testing.T) {
+	temp := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+	if err := os.Chdir(temp); err != nil {
+		t.Fatal(err)
+	}
+	output := captureStdout(t, func() {
+		if code := run([]string{"check"}); code != exitUsage {
+			t.Fatalf("check exit = %d", code)
+		}
+	})
+	for _, want := range []string{"Vigil is not set up", "What this means:", "vigil setup"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("check guidance missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestStatusTextIsBeginnerSummary(t *testing.T) {
+	temp := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+	if err := os.Chdir(temp); err != nil {
+		t.Fatal(err)
+	}
+	writeJSONFile(t, filepath.Join(temp, defaultConfigName), templateConfig("generic"))
+	output := captureStdout(t, func() {
+		if code := run([]string{"status"}); code != 0 {
+			t.Fatalf("status exit = %d", code)
+		}
+	})
+	for _, want := range []string{"Project status:", "Configuration", "Recommended next step:", "vigil check"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("status summary missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestExplainWithoutCommandSummarizesConfiguredChecks(t *testing.T) {
+	temp := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+	if err := os.Chdir(temp); err != nil {
+		t.Fatal(err)
+	}
+	writeJSONFile(t, filepath.Join(temp, defaultConfigName), templateConfig("generic"))
+	output := captureStdout(t, func() {
+		if code := run([]string{"explain"}); code != 0 {
+			t.Fatalf("explain exit = %d", code)
+		}
+	})
+	for _, want := range []string{"Vigil will run these project checks:", "Changes:", "Command:"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("explain output missing %q:\n%s", want, output)
+		}
 	}
 }
 

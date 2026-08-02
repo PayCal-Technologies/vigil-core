@@ -53,6 +53,9 @@ Installation verifies policy before downloading or executing. It then runs a
 bounded handshake before writing state. The user must approve every aggregate
 capability, either individually with repeatable `--approve` flags or explicitly
 with `--approve-all`. Publisher trust never implies capability approval.
+Capability approval is a policy and review contract. It records what the
+plugin says it needs and what the user approved, but it does not sandbox the
+plugin process.
 
 Removal revokes the exact executable digest by default. `--keep-trust` removes
 the installed executable and repository lock without adding a revocation.
@@ -213,9 +216,12 @@ without rewriting the lock.
 Capability approval is a trust decision and command contract, not an
 operating-system sandbox. Once approved, a malicious executable still runs
 with the user's OS identity and may attempt operations beyond its declaration.
-Vigil limits inherited environment data, enforces its mutation activation
-boundary, verifies identity and response integrity, and bounds process life,
-but it cannot confine arbitrary system calls.
+The more common risk Vigil is designed to reduce is accidental and over-broad
+automation: a plugin command that runs too much, changes files unexpectedly, or
+no longer matches the reviewed lock and policy state. Vigil limits inherited
+environment data, enforces its mutation activation boundary, verifies identity
+and response integrity, and bounds process life, but it cannot confine
+arbitrary system calls.
 
 Vigil supports local and HTTPS signed indexes, but no organization-wide
 "official" publisher key is silently trusted. A publisher key becomes a trust
