@@ -42,13 +42,15 @@ The standalone binary provides:
 - process timeouts, cancellation, signal handling, and stable execution states;
 - detection when read-only checks change tracked project files;
 - reviewed plans that stop when the project or setup changed after review;
-- a versioned machine envelope plus JSONL, JUnit, SARIF, and GitHub adapters;
+- structured machine output plus JSONL, JUnit, SARIF, and GitHub adapters;
 - safe setup, hook, support-bundle, and workflow commands;
 - bounded CI fuzz targets for config, manifests, argv, paths, atomic writes,
   plugin JSON, and support redaction;
-- embedded official packs that work without a Vigil source checkout;
-- deterministic pack precedence and repository-boundary enforcement;
-- digest-bound subprocess plugins with explicit local capability approval.
+- embedded official feature collections that work without a Vigil source
+  checkout;
+- deterministic feature collection precedence and repository-boundary
+  enforcement;
+- locked executable extensions with explicit local access approval.
 
 <!-- scribe:begin -->
 ## Repository Snapshot
@@ -378,9 +380,10 @@ Official feature collections cover accessibility, dependency checks, deployment
 verification, file iteration, GitHub CI generation, release policy, repository
 health, Scribe, security adapters, and test adapters.
 
-## Plugins
+## Executable Extensions
 
-Plugins can be installed from explicitly selected local executables:
+Executable extensions, exposed through the `plugins:*` commands for
+compatibility, can be installed from explicitly selected local executables:
 
 ```bash
 vigil --allow-mutation plugins:install \
@@ -393,7 +396,8 @@ vigil --allow-mutation plugins:update --file ./vigil-plugin-example --approve-al
 vigil --allow-mutation plugins:remove example
 ```
 
-Or from an exact release in a locally trusted, threshold-signed index:
+They can also come from an exact release in a locally trusted,
+threshold-signed index:
 
 ```bash
 vigil --allow-mutation plugins:trust-publisher \
@@ -407,20 +411,21 @@ vigil --allow-mutation plugins:install \
   --approve filesystem:read
 ```
 
-The repository lock pins plugin version, executable and metadata digests,
-capabilities, commands, protocol, host API, acquisition type, signed index
-digest, signer IDs, and signature threshold. Local trust records capability
-approval, digest revocation, and publisher-key revocation. Only policy-compliant,
-exact, compatible, collision-free handshakes enter the typed registry.
+The repository lock records the extension version, executable and metadata
+digests, commands, protocol, host API, acquisition type, signed index digest,
+signer IDs, signature threshold, and what the extension says it needs to
+access. Local trust records access approval, digest revocation, and publisher-key
+revocation. Only policy-compliant, exact, compatible, collision-free handshakes
+enter Vigil's command list.
 
-Plugin subprocesses receive a cleared minimal environment, bounded JSON I/O,
-timeouts, and cancellation. Capability approval is not an operating-system
-sandbox: an approved executable still runs with the user's OS identity.
-Repositories can deny local plugins, require signed acquisition, allow specific
-IDs or publishers, and deny capabilities. See
+Extension subprocesses receive a cleared minimal environment, bounded JSON I/O,
+timeouts, and cancellation. Access approval is not an operating-system sandbox:
+an approved executable still runs with the user's OS identity. Repositories can
+deny local extensions, require signed acquisition, allow specific IDs or
+publishers, and deny requested access. See
 [plugin model](docs/concepts/plugins.md).
 
-Plugin authors can run repeatable handshake checks without installation, then
+Extension authors can run repeatable handshake checks without installation, then
 exercise every declared command in a disposable repository with
 `--allow-mutation plugins:conformance --file PATH --execute`. The
 language-neutral reference fixture is checked on Linux and macOS.
@@ -472,7 +477,7 @@ The current exit taxonomy is:
 | 6 | Mutation violation |
 | 7 | Internal Vigil failure |
 
-`--json` responses use the common envelope schema `1`. Workflows and aggregate
+`--json` responses use structured output schema `1`. Workflows and aggregate
 checks also support JSONL, JUnit, and GitHub annotations; file-oriented finding
 checks support SARIF 2.1.0. See [machine output](docs/reference/json-output.md)
 and the checked-in [schemas](schemas/README.md).
