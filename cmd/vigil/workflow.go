@@ -249,7 +249,7 @@ func plan(configPath string, args []string, allowMutation bool) int {
 		return vigilcli.ExitUsage
 	}
 	if strings.TrimSpace(*outputPath) != "" && !allowMutation {
-		message := "writing a plan requires explicit mutation confirmation"
+		message := "writing a reviewed plan file requires permission to write files"
 		if *jsonOut {
 			return printJSON(map[string]any{"error": message}, vigilcli.ExitPolicyBlocked)
 		}
@@ -340,7 +340,7 @@ func applyPlanCommand(ctx context.Context, args []string, allowMutation bool) in
 		return vigilcli.ExitUsage
 	}
 	if !allowMutation {
-		message := "applying a reviewed plan requires --allow-mutation"
+		message := "applying a reviewed plan can change files; rerun with --allow-mutation to approve it"
 		if format == vigiloutput.FormatJSON {
 			return printJSON(map[string]any{"error": message}, vigilcli.ExitPolicyBlocked)
 		}

@@ -121,7 +121,7 @@ func runContext(ctx context.Context, args []string) int {
 	if requiresMutation && !confirmation.Allowed(command.Name) {
 		if wantsJSONEnvelope(commandArgs) {
 			return printJSON(map[string]any{
-				"error":   "mutation confirmation required",
+				"error":   "permission to write files is required",
 				"command": command.Name,
 			}, vigilcli.ExitPolicyBlocked)
 		}
@@ -615,7 +615,7 @@ func guardsSummary(args []string) int {
 			mutating = append(mutating, command.Command)
 		}
 	}
-	payload := map[string]any{"status": "ok", "read_only": readOnly, "mutating": mutating, "read_only_count": len(readOnly), "mutating_count": len(mutating), "confirmation": "mutating commands require explicit human or CI intent"}
+	payload := map[string]any{"status": "ok", "read_only": readOnly, "mutating": mutating, "read_only_count": len(readOnly), "mutating_count": len(mutating), "confirmation": "commands that write files require explicit human or CI approval"}
 	if jsonOut {
 		return printJSON(payload)
 	}
