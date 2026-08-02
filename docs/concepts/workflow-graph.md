@@ -3,6 +3,9 @@
 Vigil schema 3 gates form a validated directed acyclic graph. Reviewed plans
 copy the complete graph and bind it into the plan digest.
 
+For the full safety flow, including command access, mutation confirmation, and
+known non-sandbox limits, see [Safety Model](safety-model.md).
+
 ## Ordering
 
 - `depends_on` names prerequisite gates.

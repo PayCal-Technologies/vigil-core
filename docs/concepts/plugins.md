@@ -4,6 +4,9 @@ Vigil plugins are separately installed executables that contribute namespaced
 commands through subprocess protocol `1`. They do not run inside the Vigil
 process and they do not replace declarative packs.
 
+For the full safety flow, including command access, mutation confirmation, and
+known non-sandbox limits, see [Safety Model](safety-model.md).
+
 ## Lifecycle
 
 Local-file installation remains available when repository policy permits it:

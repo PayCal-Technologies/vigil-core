@@ -3,6 +3,9 @@
 Vigil separates a command's declared access from the evidence observed after it
 runs.
 
+For the full safety flow, including command registration, reviewed plans,
+plugins, and known non-sandbox limits, see [Safety Model](safety-model.md).
+
 ## Access
 
 - `read`: no declared repository or external mutation.

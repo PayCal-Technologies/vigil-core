@@ -66,6 +66,12 @@ capabilities, binding, stability, timeout, required tools, network behavior,
 and output formats. Help, command listing, completions, and manpages derive
 from it.
 
+The safety model is documented separately in
+[Safety Model](concepts/safety-model.md). That document is the contributor
+entry point for command access classification, mutation confirmation,
+reviewed-plan drift detection, workflow fingerprinting, plugin wrapping, and
+known non-sandbox boundaries.
+
 ## Dependency Rules
 
 - `internal/*` packages do not import `cmd/vigil`.

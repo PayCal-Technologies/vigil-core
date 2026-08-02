@@ -3,6 +3,9 @@
 A Vigil plan is a complete, versioned description of the configured gates and
 the evidence that makes those gates safe to execute without reinterpretation.
 
+For the full safety flow, including mutation confirmation and repository
+fingerprinting, see [Safety Model](safety-model.md).
+
 ## Create And Review
 
 Print a plan in the common JSON envelope:

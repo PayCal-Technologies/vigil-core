@@ -38,7 +38,9 @@ commands that run more than expected, write files they were declared not to
 write, or execute after the reviewed repository state has changed. Access and
 capability declarations are contracts for review, policy enforcement, and
 fail-closed behavior. They are not kernel-level confinement, and an approved
-command or plugin still runs with the user's operating-system identity.
+command or plugin still runs with the user's operating-system identity. See
+[Safety Model](concepts/safety-model.md) for the contributor-facing
+architecture of those boundaries.
 
 ## Runtime Vocabulary
 
