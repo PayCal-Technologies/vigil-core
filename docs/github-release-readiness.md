@@ -84,6 +84,11 @@ Before tagging:
 scripts/check-github-release-readiness.sh --tag v0.2.0-beta.1
 ```
 
+Also run the manual `Release Readiness` workflow from GitHub Actions against
+`main` with `tag=v0.2.0-beta.1` and `accept_tag_policy=true`. That workflow uses
+the protected `release` environment and uploads a JSON readiness report without
+exposing secret values.
+
 Then run the local candidate smoke from `main`:
 
 ```bash

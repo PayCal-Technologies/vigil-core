@@ -45,6 +45,44 @@ func TestWriteJSONLEventIsOneCompactObject(t *testing.T) {
 	}
 }
 
+func TestStreamReporterWritesTextStatus(t *testing.T) {
+	var output bytes.Buffer
+	reporter := NewStreamReporter(StreamOptions{Writer: &output, Command: "fixture", Format: FormatText, Verbose: true})
+
+	if err := reporter.Start("setup", "loading config"); err != nil {
+		t.Fatal(err)
+	}
+	if err := reporter.OK("setup", 125*time.Millisecond, "ready"); err != nil {
+		t.Fatal(err)
+	}
+
+	text := output.String()
+	if !strings.Contains(text, "[INFO] setup started: loading config") || !strings.Contains(text, "[OK] setup passed (125ms): ready") {
+		t.Fatalf("stream output = %q", text)
+	}
+}
+
+func TestStreamReporterWritesJSONLEvents(t *testing.T) {
+	var output bytes.Buffer
+	reporter := NewStreamReporter(StreamOptions{Writer: &output, Command: "fixture", Format: FormatJSONL})
+
+	if err := reporter.OK("bundle", time.Second, map[string]string{"path": "bundle.json"}); err != nil {
+		t.Fatal(err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("JSONL line count = %d: %q", len(lines), output.String())
+	}
+	var event Event
+	if err := json.Unmarshal([]byte(lines[0]), &event); err != nil {
+		t.Fatal(err)
+	}
+	if event.Type != "phase_finished" || event.Command != "fixture" || event.Sequence != 1 {
+		t.Fatalf("event = %#v", event)
+	}
+}
+
 func TestValidateEventRejectsInvalidContractFields(t *testing.T) {
 	valid := Event{
 		SchemaVersion: EventSchemaVersion,

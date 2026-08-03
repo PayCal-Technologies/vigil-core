@@ -1,15 +1,13 @@
 # Homebrew Packaging
 
-The current release workflow deterministically generates `dist/vigil.rb` for
-stable releases from the four final archive digests after macOS signing. The
-workflow installs, styles, audits, and tests the formula on macOS, then
-publishes it to `PayCal-Technologies/homebrew-tap` using a separately scoped
-`HOMEBREW_TAP_TOKEN`. Before stable publication, both native macOS targets
-install the exact formula against their matching downloaded draft archive
-through a byte-identical, canonically named temporary local copy and URL. The
-canonical `vigil-X.Y.Z.tar.gz` name preserves Homebrew's version inference.
-After publication, both targets repeat install, online audit, and test through
-the unchanged public URLs before the tap is updated.
+The current release workflow deterministically generates `dist/vigil.rb` from
+the four final archive digests after macOS signing. Beta and stable candidates
+both style, audit, install, and test the formula against draft/local archive
+URLs on macOS before publication. Stable releases then repeat install, online
+audit, and test through the unchanged public URLs before the tap is updated.
+Only stable releases publish to `PayCal-Technologies/homebrew-tap`, using a
+separately scoped `HOMEBREW_TAP_TOKEN`. The canonical `vigil-X.Y.Z.tar.gz` name
+preserves Homebrew's version inference.
 
 No public Homebrew install command exists yet. As of 2026-08-01,
 `PayCal-Technologies/homebrew-tap` exists, but the release environment has no

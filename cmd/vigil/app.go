@@ -1,19 +1,18 @@
 package main
 
 import (
+	"bufio"
 	"context"
-
 	"flag"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	vigilcli "github.com/PayCal-Technologies/vigil-public/internal/cli"
 	vigilconfig "github.com/PayCal-Technologies/vigil-public/internal/config"
-
 	vigilpacks "github.com/PayCal-Technologies/vigil-public/internal/packs"
 	vigilplugins "github.com/PayCal-Technologies/vigil-public/internal/plugins"
-	"os"
-
-	"strings"
 )
 
 const (
@@ -62,6 +61,10 @@ func runContext(ctx context.Context, args []string) int {
 	}
 	if exitCode, handled := runFastReadCommand(rest[0], rest[1:]); handled {
 		return exitCode
+	}
+	if err := loadConfiguredEnvFiles(*configPath); err != nil {
+		fmt.Fprintf(os.Stderr, "%s environment load failed: %v\n", statusLabel("fail"), err)
+		return exitUsage
 	}
 	registry, err := newCommandRegistryForConfigContext(ctx, *configPath)
 	if err != nil {
@@ -129,6 +132,80 @@ func runContext(ctx context.Context, args []string) int {
 		Auto:          confirmation.Auto,
 	})
 	return vigilcli.ClassifyExit(exitCode).Code
+}
+
+func loadConfiguredEnvFiles(configPath string) error {
+	cfg, cfgPath, err := loadConfig(configPath)
+	if err != nil {
+		return nil
+	}
+	configDir := filepath.Dir(cfgPath)
+	for _, envFile := range cfg.Environment.Files {
+		if !cfg.Environment.LoadEnvFiles && !envFile.Load {
+			continue
+		}
+		path := strings.TrimSpace(envFile.Path)
+		if path == "" {
+			continue
+		}
+		if filepath.IsAbs(path) {
+			return fmt.Errorf("env file must be relative to config directory: %s", path)
+		}
+		if !vigilpacks.PathInside(".", filepath.Clean(path)) {
+			return fmt.Errorf("env file must stay inside config directory: %s", path)
+		}
+		if err := loadEnvFile(filepath.Join(configDir, path), envFile.Required); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func loadEnvFile(path string, required bool) error {
+	file, err := os.Open(path)
+	if err != nil {
+		if required {
+			return err
+		}
+		return nil
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	lineNo := 0
+	for scanner.Scan() {
+		lineNo++
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if strings.HasPrefix(line, "export ") {
+			line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
+		}
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			return fmt.Errorf("%s:%d: expected KEY=value", path, lineNo)
+		}
+		key = strings.TrimSpace(key)
+		if key == "" {
+			return fmt.Errorf("%s:%d: empty env key", path, lineNo)
+		}
+		if _, exists := os.LookupEnv(key); exists {
+			continue
+		}
+		os.Setenv(key, unquoteEnvValue(strings.TrimSpace(value)))
+	}
+	return scanner.Err()
+}
+
+func unquoteEnvValue(value string) string {
+	if len(value) < 2 {
+		return value
+	}
+	if (value[0] == '"' && value[len(value)-1] == '"') || (value[0] == '\'' && value[len(value)-1] == '\'') {
+		return value[1 : len(value)-1]
+	}
+	return value
 }
 
 func runFastReadCommand(command string, args []string) (int, bool) {

@@ -38,6 +38,19 @@ func TestApplyDocumentDefaultsMigratesLegacyShellAndArgvGates(t *testing.T) {
 	}
 }
 
+func TestEnvironmentFilePathsStayInsideConfigDirectory(t *testing.T) {
+	cfg := Template("generic", "fixture")
+	cfg.Environment = Environment{
+		LoadEnvFiles: true,
+		Files:        []EnvFile{{Path: "../.env", Load: true}},
+	}
+
+	issues := ValidateIssues(cfg)
+	if !hasIssue(issues, "environment.file.escape") {
+		t.Fatalf("expected environment.file.escape issue, got %#v", issues)
+	}
+}
+
 func TestMarshalDocumentPreservesUnknownFieldsAndDropsLegacyAuthority(t *testing.T) {
 	data := []byte(`{
   "schema_version": "1",
@@ -85,6 +98,15 @@ func TestValidateIssuesRejectsAmbiguousArgvAndEscapingPackRoot(t *testing.T) {
 	if !codes["gates.argv.command"] || !codes["extensions.manifest_root.escape"] {
 		t.Fatalf("issues = %#v", issues)
 	}
+}
+
+func hasIssue(issues []Issue, code string) bool {
+	for _, issue := range issues {
+		if issue.Code == code {
+			return true
+		}
+	}
+	return false
 }
 
 func TestGateIssuesRejectInvalidWorkflowGraphAndUnsafeExecutionControls(t *testing.T) {

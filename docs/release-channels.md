@@ -8,12 +8,11 @@ retention contracts.
 Tags of the form `vX.Y.Z` produce a normal GitHub release and become the
 repository's latest release. Stable assets pass the complete source, race,
 unsigned-candidate reproducibility, macOS signing/notarization, SBOM, checksum,
-Sigstore, attestation, downloaded-asset, and empty-directory smoke matrix. The
-stable-only Homebrew job installs, audits, tests, and publishes the exact
-release formula to the project tap. The uploaded candidate remains a draft
-through native smoke and a local-asset formula install, then is published once
-as latest. Public-URL Homebrew audit and tap synchronization remain required
-downstream release-workflow evidence.
+Sigstore, attestation, downloaded-asset, Homebrew draft formula, and
+empty-directory smoke matrix. Stable publication adds public-URL Homebrew audit
+and project-tap synchronization. The uploaded candidate remains a draft through
+native smoke and a local-asset formula install, then is published once as
+latest.
 
 Stable releases produced after repository immutability was enabled are
 immutable. A correction requires a new semantic version; assets and tags are
@@ -22,12 +21,12 @@ repository setting and is not part of the current release-workflow contract.
 
 ## Beta
 
-Semantic-version prerelease tags such as `v0.5.0-beta.1` run the same release
-pipeline through the native matrix and publish the same signed artifact and
-provenance set as stable releases. GitHub marks them as prereleases only after
-the draft assets pass that matrix, and they never replace the latest stable
-release. Stable-only Homebrew install, online audit, and tap publication jobs
-are skipped.
+Semantic-version prerelease tags such as `v0.2.0-beta.1` run the same release
+pipeline through the native matrix and draft Homebrew formula test, then
+publish the same signed artifact and provenance set as stable releases. GitHub
+marks them as prereleases only after the draft assets pass that matrix, and
+they never replace the latest stable release. Public-URL Homebrew audit and tap
+publication jobs are skipped.
 
 GitHub release immutability is enabled for the repository. Because published
 immutable releases permit only title and note edits, Vigil never relies on

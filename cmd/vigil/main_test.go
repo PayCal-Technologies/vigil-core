@@ -77,6 +77,49 @@ func TestActiveCommandsIncludePublicCICD(t *testing.T) {
 	}
 }
 
+func TestLoadConfiguredEnvFilesUsesConfigDirectory(t *testing.T) {
+	temp := t.TempDir()
+	configPath := filepath.Join(temp, defaultConfigName)
+	if err := os.WriteFile(filepath.Join(temp, ".env"), []byte("VIGIL_FIXTURE_ENV=\"from-file\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := templateConfig("generic")
+	cfg.Environment.LoadEnvFiles = true
+	cfg.Environment.Files = []vigilconfig.EnvFile{{Path: ".env", Load: true}}
+	writeJSONFile(t, configPath, cfg)
+	os.Unsetenv("VIGIL_FIXTURE_ENV")
+
+	if err := loadConfiguredEnvFiles(configPath); err != nil {
+		t.Fatalf("loadConfiguredEnvFiles failed: %v", err)
+	}
+
+	if got := os.Getenv("VIGIL_FIXTURE_ENV"); got != "from-file" {
+		t.Fatalf("VIGIL_FIXTURE_ENV = %q, want from-file", got)
+	}
+}
+
+func TestLoadEnvFilePreservesExistingProcessValue(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".env")
+	if err := os.WriteFile(path, []byte("VIGIL_FIXTURE_ENV=file-value\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("VIGIL_FIXTURE_ENV", "process-value")
+
+	if err := loadEnvFile(path, true); err != nil {
+		t.Fatalf("loadEnvFile failed: %v", err)
+	}
+
+	if got := os.Getenv("VIGIL_FIXTURE_ENV"); got != "process-value" {
+		t.Fatalf("VIGIL_FIXTURE_ENV = %q, want process-value", got)
+	}
+}
+
+func TestLoadEnvFileOptionalMissingDoesNotFail(t *testing.T) {
+	if err := loadEnvFile(filepath.Join(t.TempDir(), "missing.env"), false); err != nil {
+		t.Fatalf("optional missing env file failed: %v", err)
+	}
+}
+
 func TestCommandRegistryCacheReusesEquivalentInputsAndInvalidatesContractChanges(t *testing.T) {
 	commandRegistries.Clear()
 	root := t.TempDir()

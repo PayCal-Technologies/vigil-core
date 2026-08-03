@@ -25,6 +25,7 @@ type Config struct {
 	Coordination             Coordination      `json:"coordination"`
 	Gates                    []Gate            `json:"gates"`
 	Extensions               packs.Settings    `json:"extensions"`
+	Environment              Environment       `json:"environment,omitempty"`
 	Plugins                  *plugins.Policy   `json:"plugins,omitempty"`
 	PublicAssumptionPatterns []string          `json:"public_assumption_patterns,omitempty"`
 	Metadata                 map[string]string `json:"metadata,omitempty"`
@@ -70,6 +71,17 @@ type GateArtifact struct {
 	Kind      string `json:"kind,omitempty"`
 	MediaType string `json:"media_type,omitempty"`
 	Required  *bool  `json:"required,omitempty"`
+}
+
+type Environment struct {
+	LoadEnvFiles bool      `json:"load_env_files,omitempty"`
+	Files        []EnvFile `json:"files,omitempty"`
+}
+
+type EnvFile struct {
+	Path     string `json:"path"`
+	Required bool   `json:"required,omitempty"`
+	Load     bool   `json:"load,omitempty"`
 }
 
 type Issue struct {
@@ -223,6 +235,11 @@ func MarshalDocument(raw map[string]json.RawMessage, cfg Config) ([]byte, error)
 	}
 	if len(cfg.PublicAssumptionPatterns) > 0 {
 		if err := setRaw("public_assumption_patterns", cfg.PublicAssumptionPatterns); err != nil {
+			return nil, err
+		}
+	}
+	if cfg.Environment.LoadEnvFiles || len(cfg.Environment.Files) > 0 {
+		if err := setRaw("environment", cfg.Environment); err != nil {
 			return nil, err
 		}
 	}
@@ -386,6 +403,19 @@ func ValidateIssues(cfg Config) []Issue {
 		}
 		if len(cfg.Extensions.AllowedKinds) == 0 {
 			add("extensions.allowed_kinds", "extensions.allowed_kinds.required", "extensions.allowed_kinds must name at least one allowed pack kind")
+		}
+	}
+	if cfg.Environment.LoadEnvFiles || len(cfg.Environment.Files) > 0 {
+		for i, file := range cfg.Environment.Files {
+			path := strings.TrimSpace(file.Path)
+			field := fmt.Sprintf("environment.files[%d].path", i)
+			if path == "" {
+				add(field, "environment.file.empty", "environment file path cannot be empty")
+				continue
+			}
+			if filepath.IsAbs(path) || !packs.PathInside(".", filepath.Clean(path)) {
+				add(field, "environment.file.escape", "environment file path must stay inside the repository config directory")
+			}
 		}
 	}
 	if cfg.Plugins != nil {

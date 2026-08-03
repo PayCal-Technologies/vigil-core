@@ -22,6 +22,7 @@ labels: release
       permission for this repository.
 - [ ] Stable only: `HOMEBREW_TAP_TOKEN` is configured for the project tap.
 - [ ] `scripts/check-github-release-readiness.sh --tag vX.Y.Z` passes.
+- [ ] Manual `Release Readiness` workflow passes and uploads JSON evidence.
 
 ## Local Candidate Smoke
 
@@ -44,13 +45,13 @@ labels: release
 - [ ] GitHub attestations verify for all release assets.
 - [ ] Native release smoke passes on Linux amd64, Linux arm64, macOS Intel, and
       macOS Apple Silicon.
+- [ ] Homebrew draft formula styles, audits, installs, and tests on macOS Intel
+      and Apple Silicon.
 - [ ] Published release has the expected channel state.
 - [ ] Published release reports immutable.
 
 ## Homebrew
 
-- [ ] Stable only: draft formula styles, audits, installs, and tests on macOS
-      Intel and Apple Silicon.
 - [ ] Stable only: public release formula installs, audits online, and tests on
       macOS Intel and Apple Silicon.
 - [ ] Stable only: project tap commit is published.
