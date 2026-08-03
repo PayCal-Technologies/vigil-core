@@ -128,9 +128,16 @@ func pluginInstallOrUpdate(ctx context.Context, command, configPath string, args
 	expectedVersion := fs.String("version", "", "expected semantic version")
 	expectedDigestValue := fs.String("digest", "", "expected SHA-256 executable digest")
 	jsonOut := fs.Bool("json", false, "json output")
+	stream := fs.String("stream", "", "stream phase status: text or jsonl")
+	verbose := fs.Bool("verbose", false, "stream text phase status")
 	var approved pluginCapabilityFlags
 	fs.Var(&approved, "approve", "approve one declared capability (repeatable)")
 	if err := fs.Parse(args); err != nil {
+		return exitUsage
+	}
+	reporter, err := commandStreamReporter(command, *stream, *verbose, *jsonOut)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		return exitUsage
 	}
 	localCandidate := strings.TrimSpace(*candidate)
@@ -139,13 +146,33 @@ func pluginInstallOrUpdate(ctx context.Context, command, configPath string, args
 		fmt.Fprintf(os.Stderr, "Usage: vigil %s (--file PATH|--index PATH_OR_HTTPS_URL --id ID --version VERSION) [--approve CAPABILITY ...|--approve-all]\n", command)
 		return exitUsage
 	}
+	layoutStarted := time.Now()
+	if reporter != nil {
+		_ = reporter.Start("resolve plugin layout", configPath)
+	}
 	layout, err := pluginLayoutForConfig(configPath)
 	if err != nil {
+		if reporter != nil {
+			_ = reporter.Fail("resolve plugin layout", exitInternal, time.Since(layoutStarted), err.Error())
+		}
 		return pluginErrorOutput(*jsonOut, command, err)
+	}
+	if reporter != nil {
+		_ = reporter.OK("resolve plugin layout", time.Since(layoutStarted), layout.Root)
+	}
+	policyStarted := time.Now()
+	if reporter != nil {
+		_ = reporter.Start("load plugin policy", configPath)
 	}
 	policy, err := pluginPolicyForConfig(configPath)
 	if err != nil {
+		if reporter != nil {
+			_ = reporter.Fail("load plugin policy", exitInternal, time.Since(policyStarted), err.Error())
+		}
 		return pluginErrorOutput(*jsonOut, command, err)
+	}
+	if reporter != nil {
+		_ = reporter.OK("load plugin policy", time.Since(policyStarted), policy.Mode)
 	}
 	expectedDigest := ""
 	if strings.TrimSpace(*expectedDigestValue) != "" {
@@ -174,9 +201,23 @@ func pluginInstallOrUpdate(ctx context.Context, command, configPath string, args
 			fmt.Fprintln(os.Stderr, "--index requires --id and --version and does not accept --digest")
 			return exitUsage
 		}
+		loadStarted := time.Now()
+		if reporter != nil {
+			_ = reporter.Start("load signed index", indexCandidate)
+		}
 		loaded, loadErr := vigilplugins.LoadVerifiedIndex(ctx, layout, indexCandidate, vigilplugins.IndexLoadOptions{})
 		if loadErr != nil {
+			if reporter != nil {
+				_ = reporter.Fail("load signed index", exitPolicyBlocked, time.Since(loadStarted), loadErr.Error())
+			}
 			return pluginErrorOutput(*jsonOut, command, loadErr)
+		}
+		if reporter != nil {
+			_ = reporter.OK("load signed index", time.Since(loadStarted), loaded.Source)
+		}
+		selectStarted := time.Now()
+		if reporter != nil {
+			_ = reporter.Start("select indexed release", strings.TrimSpace(*expectedID)+"@"+strings.TrimSpace(*expectedVersion))
 		}
 		selected, selectErr := vigilplugins.SelectIndexRelease(
 			loaded.Verified,
@@ -186,7 +227,17 @@ func pluginInstallOrUpdate(ctx context.Context, command, configPath string, args
 			runtime.GOARCH,
 		)
 		if selectErr != nil {
+			if reporter != nil {
+				_ = reporter.Fail("select indexed release", exitPolicyBlocked, time.Since(selectStarted), selectErr.Error())
+			}
 			return pluginErrorOutput(*jsonOut, command, selectErr)
+		}
+		if reporter != nil {
+			_ = reporter.OK("select indexed release", time.Since(selectStarted), selected.Release.ID+"@"+selected.Release.Version)
+		}
+		checkStarted := time.Now()
+		if reporter != nil {
+			_ = reporter.Start("check plugin policy", selected.Release.ID)
 		}
 		if policyErr := vigilplugins.CheckPolicy(
 			policy,
@@ -196,11 +247,27 @@ func pluginInstallOrUpdate(ctx context.Context, command, configPath string, args
 			loaded.Verified.SignerIDs,
 			loaded.Verified.Document.Signed.SignatureThreshold,
 		); policyErr != nil {
+			if reporter != nil {
+				_ = reporter.Fail("check plugin policy", exitPolicyBlocked, time.Since(checkStarted), policyErr.Error())
+			}
 			return pluginErrorOutput(*jsonOut, command, policyErr)
+		}
+		if reporter != nil {
+			_ = reporter.OK("check plugin policy", time.Since(checkStarted), selected.Release.ID)
+		}
+		acquireStarted := time.Now()
+		if reporter != nil {
+			_ = reporter.Start("acquire plugin artifact", selected.Release.ID)
 		}
 		acquired, err = vigilplugins.AcquireIndexedPlugin(ctx, layout, loaded, selected, nil)
 		if err != nil {
+			if reporter != nil {
+				_ = reporter.Fail("acquire plugin artifact", exitInternal, time.Since(acquireStarted), err.Error())
+			}
 			return pluginErrorOutput(*jsonOut, command, err)
+		}
+		if reporter != nil {
+			_ = reporter.OK("acquire plugin artifact", time.Since(acquireStarted), acquired.Path)
 		}
 		defer func() { _ = vigilplugins.RemoveAcquiredPlugin(acquired) }()
 		installOptions.Candidate = acquired.Path
@@ -219,9 +286,19 @@ func pluginInstallOrUpdate(ctx context.Context, command, configPath string, args
 			"artifact":            acquired.Artifact,
 		}
 	}
+	installStarted := time.Now()
+	if reporter != nil {
+		_ = reporter.Start("install plugin", installOptions.Candidate)
+	}
 	result, err := vigilplugins.Install(ctx, installOptions)
 	if err != nil {
+		if reporter != nil {
+			_ = reporter.Fail("install plugin", exitPolicyBlocked, time.Since(installStarted), err.Error())
+		}
 		return pluginErrorOutput(*jsonOut, command, err)
+	}
+	if reporter != nil {
+		_ = reporter.OK("install plugin", time.Since(installStarted), result.Plugin.ID+"@"+result.Plugin.Version)
 	}
 	if *jsonOut {
 		payload := map[string]any{"status": "ok", "result": result}
@@ -275,20 +352,47 @@ func pluginPublisherReadCommand(ctx context.Context, command, configPath string,
 		fs.SetOutput(os.Stderr)
 		indexSource := fs.String("index", "", "signed plugin index path or HTTPS URL")
 		jsonOut := fs.Bool("json", false, "json output")
+		stream := fs.String("stream", "", "stream phase status: text or jsonl")
+		verbose := fs.Bool("verbose", false, "stream text phase status")
 		if err := fs.Parse(args); err != nil {
+			return exitUsage
+		}
+		reporter, err := commandStreamReporter(command, *stream, *verbose, *jsonOut)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
 			return exitUsage
 		}
 		if fs.NArg() != 0 || strings.TrimSpace(*indexSource) == "" {
 			fmt.Fprintln(os.Stderr, "Usage: vigil plugins:index:verify --index PATH_OR_HTTPS_URL [--json]")
 			return exitUsage
 		}
+		layoutStarted := time.Now()
+		if reporter != nil {
+			_ = reporter.Start("resolve plugin layout", configPath)
+		}
 		layout, err := pluginLayoutForConfig(configPath)
 		if err != nil {
+			if reporter != nil {
+				_ = reporter.Fail("resolve plugin layout", exitInternal, time.Since(layoutStarted), err.Error())
+			}
 			return pluginErrorOutput(*jsonOut, command, err)
+		}
+		if reporter != nil {
+			_ = reporter.OK("resolve plugin layout", time.Since(layoutStarted), layout.Root)
+		}
+		verifyStarted := time.Now()
+		if reporter != nil {
+			_ = reporter.Start("verify plugin index", strings.TrimSpace(*indexSource))
 		}
 		loaded, err := vigilplugins.LoadVerifiedIndex(ctx, layout, strings.TrimSpace(*indexSource), vigilplugins.IndexLoadOptions{})
 		if err != nil {
+			if reporter != nil {
+				_ = reporter.Fail("verify plugin index", exitPolicyBlocked, time.Since(verifyStarted), err.Error())
+			}
 			return pluginErrorOutput(*jsonOut, command, err)
+		}
+		if reporter != nil {
+			_ = reporter.OK("verify plugin index", time.Since(verifyStarted), loaded.Source)
 		}
 		payload := map[string]any{
 			"status": "ok", "source": loaded.Source, "signer_ids": loaded.Verified.SignerIDs,
@@ -323,12 +427,23 @@ func pluginPublisherMutationCommand(command, configPath string, args []string) i
 		name := fs.String("name", "", "publisher display name")
 		restoreTrust := fs.Bool("restore-trust", false, "remove a matching key revocation")
 		jsonOut := fs.Bool("json", false, "json output")
+		stream := fs.String("stream", "", "stream phase status: text or jsonl")
+		verbose := fs.Bool("verbose", false, "stream text phase status")
 		if err := fs.Parse(args); err != nil {
+			return exitUsage
+		}
+		reporter, err := commandStreamReporter(command, *stream, *verbose, *jsonOut)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
 			return exitUsage
 		}
 		if fs.NArg() != 0 || strings.TrimSpace(*keyPath) == "" || strings.TrimSpace(*name) == "" {
 			fmt.Fprintln(os.Stderr, "Usage: vigil --allow-mutation plugins:trust-publisher --key PATH --name NAME [--restore-trust] [--json]")
 			return exitUsage
+		}
+		started := time.Now()
+		if reporter != nil {
+			_ = reporter.Start("trust publisher", strings.TrimSpace(*name))
 		}
 		result, err := vigilplugins.TrustPublisherFile(
 			layout,
@@ -338,7 +453,13 @@ func pluginPublisherMutationCommand(command, configPath string, args []string) i
 			*restoreTrust,
 		)
 		if err != nil {
+			if reporter != nil {
+				_ = reporter.Fail("trust publisher", exitPolicyBlocked, time.Since(started), err.Error())
+			}
 			return pluginErrorOutput(*jsonOut, command, err)
+		}
+		if reporter != nil {
+			_ = reporter.OK("trust publisher", time.Since(started), result.Key.KeyID)
 		}
 		if *jsonOut {
 			return printJSON(map[string]any{"status": "ok", "result": result})
@@ -349,16 +470,33 @@ func pluginPublisherMutationCommand(command, configPath string, args []string) i
 		fs := flag.NewFlagSet(command, flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		jsonOut := fs.Bool("json", false, "json output")
+		stream := fs.String("stream", "", "stream phase status: text or jsonl")
+		verbose := fs.Bool("verbose", false, "stream text phase status")
 		if err := fs.Parse(args); err != nil {
+			return exitUsage
+		}
+		reporter, err := commandStreamReporter(command, *stream, *verbose, *jsonOut)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
 			return exitUsage
 		}
 		if fs.NArg() != 1 {
 			fmt.Fprintln(os.Stderr, "Usage: vigil --allow-mutation plugins:revoke-publisher [--json] KEY_ID")
 			return exitUsage
 		}
+		started := time.Now()
+		if reporter != nil {
+			_ = reporter.Start("revoke publisher", fs.Arg(0))
+		}
 		result, err := vigilplugins.RevokePublisher(layout, fs.Arg(0))
 		if err != nil {
+			if reporter != nil {
+				_ = reporter.Fail("revoke publisher", exitPolicyBlocked, time.Since(started), err.Error())
+			}
 			return pluginErrorOutput(*jsonOut, command, err)
+		}
+		if reporter != nil {
+			_ = reporter.OK("revoke publisher", time.Since(started), result.KeyID)
 		}
 		if *jsonOut {
 			return printJSON(map[string]any{"status": "ok", "result": result})
@@ -376,22 +514,49 @@ func pluginRemove(configPath string, args []string) int {
 	version := fs.String("version", "", "require an exact locked version")
 	keepTrust := fs.Bool("keep-trust", false, "remove without revoking the digest")
 	jsonOut := fs.Bool("json", false, "json output")
+	stream := fs.String("stream", "", "stream phase status: text or jsonl")
+	verbose := fs.Bool("verbose", false, "stream text phase status")
 	if err := fs.Parse(args); err != nil {
+		return exitUsage
+	}
+	reporter, err := commandStreamReporter("plugins:remove", *stream, *verbose, *jsonOut)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		return exitUsage
 	}
 	if fs.NArg() != 1 {
 		fmt.Fprintln(os.Stderr, "Usage: vigil plugins:remove [--version VERSION] [--keep-trust] <plugin-id>")
 		return exitUsage
 	}
+	layoutStarted := time.Now()
+	if reporter != nil {
+		_ = reporter.Start("resolve plugin layout", configPath)
+	}
 	layout, err := pluginLayoutForConfig(configPath)
 	if err != nil {
+		if reporter != nil {
+			_ = reporter.Fail("resolve plugin layout", exitInternal, time.Since(layoutStarted), err.Error())
+		}
 		return pluginErrorOutput(*jsonOut, "plugins:remove", err)
+	}
+	if reporter != nil {
+		_ = reporter.OK("resolve plugin layout", time.Since(layoutStarted), layout.Root)
+	}
+	removeStarted := time.Now()
+	if reporter != nil {
+		_ = reporter.Start("remove plugin", fs.Arg(0))
 	}
 	result, err := vigilplugins.Remove(vigilplugins.RemoveOptions{
 		Layout: layout, ID: fs.Arg(0), Version: strings.TrimSpace(*version), Revoke: !*keepTrust,
 	})
 	if err != nil {
+		if reporter != nil {
+			_ = reporter.Fail("remove plugin", exitPolicyBlocked, time.Since(removeStarted), err.Error())
+		}
 		return pluginErrorOutput(*jsonOut, "plugins:remove", err)
+	}
+	if reporter != nil {
+		_ = reporter.OK("remove plugin", time.Since(removeStarted), result.ID+"@"+result.Version)
 	}
 	if *jsonOut {
 		return printJSON(map[string]any{"status": "ok", "result": result})

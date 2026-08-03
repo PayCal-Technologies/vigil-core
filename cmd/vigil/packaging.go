@@ -26,10 +26,32 @@ func supportBundle(configPath string, args []string) int {
 	includeConfig := fs.Bool("include-config", false, "include the complete config by explicit request")
 	includeGitStatus := fs.Bool("include-git-status", false, "include redacted Git status by explicit request")
 	outputPath := fs.String("output", "", "output path")
+	stream := fs.String("stream", "", "stream phase status: text or jsonl")
+	verbose := fs.Bool("verbose", false, "stream text phase status")
 	if err := fs.Parse(args); err != nil {
 		return exitUsage
 	}
+	if *dryRun && (*stream != "" || *verbose) {
+		fmt.Fprintln(os.Stderr, "--stream/--verbose cannot be combined with --dry-run")
+		return exitUsage
+	}
+	reporter, err := commandStreamReporter("support:bundle", *stream, *verbose, *jsonOut)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitUsage
+	}
+	started := time.Now()
+	if reporter != nil {
+		_ = reporter.Start("load config", configPath)
+	}
 	cfg, cfgPath, cfgErr := loadConfig(configPath)
+	if reporter != nil {
+		if cfgErr != nil {
+			_ = reporter.Warn("load config", cfgErr.Error())
+		} else {
+			_ = reporter.OK("load config", time.Since(started), cfgPath)
+		}
+	}
 	input := vigilsupport.Input{
 		GeneratedAt:      time.Now(),
 		ConfigPath:       cfgPath,
@@ -52,8 +74,15 @@ func supportBundle(configPath string, args []string) int {
 		input.Config = cfg
 	}
 	if *includeGitStatus {
+		gitStarted := time.Now()
+		if reporter != nil {
+			_ = reporter.Start("collect git status", nil)
+		}
 		statusEntries, ok := gitStatusChecked()
 		if !ok {
+			if reporter != nil {
+				_ = reporter.Fail("collect git status", exitInternal, time.Since(gitStarted), "could not read complete Git status")
+			}
 			fmt.Fprintln(os.Stderr, "could not read complete Git status")
 			return exitInternal
 		}
@@ -65,6 +94,13 @@ func supportBundle(configPath string, args []string) int {
 				OriginalPath: entry.OriginalPath,
 			})
 		}
+		if reporter != nil {
+			_ = reporter.OK("collect git status", time.Since(gitStarted), len(input.GitStatus))
+		}
+	}
+	buildStarted := time.Now()
+	if reporter != nil {
+		_ = reporter.Start("build support bundle", nil)
 	}
 	bundle := vigilsupport.Build(input)
 	bundleID, _ := bundle["bundle_id"].(string)
@@ -73,12 +109,25 @@ func supportBundle(configPath string, args []string) int {
 		proposedPath = vigilsupport.DefaultPath(bundleID)
 	}
 	vigilsupport.AddOutput(bundle, proposedPath)
+	if reporter != nil {
+		_ = reporter.OK("build support bundle", time.Since(buildStarted), bundleID)
+	}
 	if *dryRun {
 		return printJSON(bundle)
 	}
+	writeStarted := time.Now()
+	if reporter != nil {
+		_ = reporter.Start("write support bundle", proposedPath)
+	}
 	if err := vigilsupport.Write(proposedPath, bundle); err != nil {
+		if reporter != nil {
+			_ = reporter.Fail("write support bundle", exitInternal, time.Since(writeStarted), err.Error())
+		}
 		fmt.Fprintln(os.Stderr, err)
 		return exitInternal
+	}
+	if reporter != nil {
+		_ = reporter.OK("write support bundle", time.Since(writeStarted), proposedPath)
 	}
 	if *jsonOut {
 		return printJSON(map[string]any{

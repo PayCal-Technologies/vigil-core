@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/PayCal-Technologies/vigil-public/internal/atomicfile"
 
@@ -272,19 +273,46 @@ func configMigrate(configPath string, args []string) int {
 	fs.SetOutput(os.Stderr)
 	write := fs.Bool("write", false, "write migrated config")
 	jsonOut := fs.Bool("json", false, "json output")
+	stream := fs.String("stream", "", "stream phase status: text or jsonl")
+	verbose := fs.Bool("verbose", false, "stream text phase status")
 	if err := fs.Parse(args); err != nil {
 		return exitUsage
 	}
-	path := resolvedConfigPath(configPath)
-	data, err := readConfigFile(path)
+	reporter, err := commandStreamReporter("config:migrate", *stream, *verbose, *jsonOut)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return exitUsage
 	}
+	path := resolvedConfigPath(configPath)
+	readStarted := time.Now()
+	if reporter != nil {
+		_ = reporter.Start("read config", path)
+	}
+	data, err := readConfigFile(path)
+	if err != nil {
+		if reporter != nil {
+			_ = reporter.Fail("read config", exitUsage, time.Since(readStarted), err.Error())
+		}
+		fmt.Fprintln(os.Stderr, err)
+		return exitUsage
+	}
+	if reporter != nil {
+		_ = reporter.OK("read config", time.Since(readStarted), path)
+	}
+	parseStarted := time.Now()
+	if reporter != nil {
+		_ = reporter.Start("parse config", path)
+	}
 	doc, err := parseConfigDocument(data)
 	if err != nil {
+		if reporter != nil {
+			_ = reporter.Fail("parse config", exitUsage, time.Since(parseStarted), err.Error())
+		}
 		fmt.Fprintln(os.Stderr, "invalid JSON: "+err.Error())
 		return exitUsage
+	}
+	if reporter != nil {
+		_ = reporter.OK("parse config", time.Since(parseStarted), doc.SchemaVersion)
 	}
 	before := doc.SchemaVersion
 	if before != "unknown" && compareSchemaVersion(before, configSchemaVersion) > 0 {
@@ -301,12 +329,24 @@ func configMigrate(configPath string, args []string) int {
 	changed := string(next) != string(data)
 	writeResult := atomicWriteResult{}
 	if *write && changed {
+		writeStarted := time.Now()
+		if reporter != nil {
+			_ = reporter.Start("write migrated config", path)
+		}
 		result, err := atomicWriteFile(path, next, true)
 		if err != nil {
+			if reporter != nil {
+				_ = reporter.Fail("write migrated config", exitInternal, time.Since(writeStarted), err.Error())
+			}
 			fmt.Fprintln(os.Stderr, err)
 			return exitInternal
 		}
 		writeResult = result
+		if reporter != nil {
+			_ = reporter.OK("write migrated config", time.Since(writeStarted), writeResult.BackupPath)
+		}
+	} else if reporter != nil {
+		_ = reporter.Info("write migrated config", fmt.Sprintf("skipped changed=%t write=%t", changed, *write))
 	}
 	payload := map[string]any{"status": "ok", "path": path, "from_schema": before, "to_schema": configSchemaVersion, "changed": changed, "written": *write && changed, "backup_path": writeResult.BackupPath}
 	if *jsonOut {
@@ -334,17 +374,31 @@ func repairConfig(configPath string, args []string) int {
 	profile := fs.String("profile", "generic", "profile for defaults")
 	yes := fs.Bool("yes", false, "accept defaults without prompting")
 	jsonOut := fs.Bool("json", false, "json output")
+	stream := fs.String("stream", "", "stream phase status: text or jsonl")
+	verbose := fs.Bool("verbose", false, "stream text phase status")
 	if err := fs.Parse(args); err != nil {
 		return exitUsage
 	}
+	reporter, err := commandStreamReporter("config:repair", *stream, *verbose, *jsonOut)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitUsage
+	}
 	path := resolvedConfigPath(configPath)
+	if reporter != nil {
+		_ = reporter.Start("inspect config", path)
+	}
 	cfg := config{}
 	rawDoc := map[string]json.RawMessage{}
 	existed := fileExists(path)
 	replacedMalformed := false
 	if existed {
+		inspectStarted := time.Now()
 		data, err := readConfigFile(path)
 		if err != nil {
+			if reporter != nil {
+				_ = reporter.Fail("inspect config", exitInternal, time.Since(inspectStarted), err.Error())
+			}
 			fmt.Fprintln(os.Stderr, err)
 			return exitInternal
 		}
@@ -373,6 +427,9 @@ func repairConfig(configPath string, args []string) int {
 	} else {
 		cfg = templateConfig(*profile)
 	}
+	if reporter != nil {
+		_ = reporter.OK("inspect config", 0, fmt.Sprintf("exists=%t", existed))
+	}
 	before := validateConfigIssues(cfg)
 	if existed && len(before) == 0 && !replacedMalformed {
 		if *jsonOut {
@@ -382,16 +439,25 @@ func repairConfig(configPath string, args []string) int {
 		return exitSuccess
 	}
 	if *yes {
+		if reporter != nil {
+			_ = reporter.Start("apply defaults", *profile)
+		}
 		if len(rawDoc) > 0 {
 			cfg = applyConfigDocumentDefaults(configDocument{Config: cfg, Raw: rawDoc}, *profile)
 		} else {
 			cfg = applyConfigDefaults(cfg, *profile)
+		}
+		if reporter != nil {
+			_ = reporter.OK("apply defaults", 0, *profile)
 		}
 	} else {
 		cfg = promptConfigRepair(cfg, *profile)
 	}
 	after := validateConfigIssues(cfg)
 	if len(after) > 0 {
+		if reporter != nil {
+			_ = reporter.Fail("validate repaired config", exitUsage, 0, issueMessages(after))
+		}
 		if *jsonOut {
 			return printStatusJSON(map[string]any{"status": "fail", "path": path, "issues": issueMessages(after), "structured_issues": after}, exitUsage)
 		}
@@ -410,14 +476,27 @@ func repairConfig(configPath string, args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return exitInternal
 	}
+	writeStarted := time.Now()
+	if reporter != nil {
+		_ = reporter.Start("write repaired config", path)
+	}
 	writeResult, err := atomicWriteFile(path, data, existed)
 	if err != nil {
+		if reporter != nil {
+			_ = reporter.Fail("write repaired config", exitInternal, time.Since(writeStarted), err.Error())
+		}
 		fmt.Fprintln(os.Stderr, err)
 		return exitInternal
 	}
 	if _, _, err := loadConfig(path); err != nil {
+		if reporter != nil {
+			_ = reporter.Fail("validate repaired config", exitInternal, time.Since(writeStarted), err.Error())
+		}
 		fmt.Fprintln(os.Stderr, "post-write validation failed: "+err.Error())
 		return exitInternal
+	}
+	if reporter != nil {
+		_ = reporter.OK("write repaired config", time.Since(writeStarted), writeResult.BackupPath)
 	}
 	if *jsonOut {
 		return printJSON(map[string]any{"status": "ok", "path": path, "changed": true, "replaced_malformed": replacedMalformed, "fixed_issues": before, "backup_path": writeResult.BackupPath})

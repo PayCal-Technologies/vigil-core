@@ -9,11 +9,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"path/filepath"
 
 	"strconv"
 	"strings"
+
+	vigiloutput "github.com/PayCal-Technologies/vigil-public/internal/output"
 )
 
 var promptReader = bufio.NewReader(os.Stdin)
@@ -31,7 +34,18 @@ func setupWizard(configPath string, args []string) int {
 	noDoctor := fs.Bool("no-doctor", false, "skip doctor in non-interactive setup")
 	workflowMode := fs.String("workflow", "dry-run", "non-interactive workflow mode: dry-run, execute, or skip")
 	jsonOut := fs.Bool("json", false, "json output")
+	stream := fs.String("stream", "", "stream phase status: text or jsonl")
+	verbose := fs.Bool("verbose", false, "stream text phase status")
 	if err := fs.Parse(args); err != nil {
+		return exitUsage
+	}
+	reporter, err := commandStreamReporter("setup:wizard", *stream, *verbose, *jsonOut)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitUsage
+	}
+	if reporter != nil && !*yes {
+		fmt.Fprintln(os.Stderr, "--stream/--verbose requires --yes for setup:wizard")
 		return exitUsage
 	}
 	switch *workflowMode {
@@ -41,7 +55,7 @@ func setupWizard(configPath string, args []string) int {
 		return exitUsage
 	}
 	if *yes && !*jsonOut {
-		return runNonInteractiveSetupWizard(configPath, *profile, *write && !*dryRun, *force, *dryRun, *gatesCSV, *installHooks, !*noDoctor, *workflowMode)
+		return runNonInteractiveSetupWizard(configPath, *profile, *write && !*dryRun, *force, *dryRun, *gatesCSV, *installHooks, !*noDoctor, *workflowMode, reporter)
 	}
 	if !*jsonOut && !*yes {
 		if !isInteractiveTerminal() {
@@ -50,12 +64,22 @@ func setupWizard(configPath string, args []string) int {
 		}
 		return runInteractiveSetupWizard(configPath, *profile, *write && !*dryRun, *force, *dryRun)
 	}
+	planStarted := time.Now()
+	if reporter != nil {
+		_ = reporter.Start("build setup plan", configPath)
+	}
 	plan := buildSetupPlan(configPath, *profile)
+	if reporter != nil {
+		_ = reporter.OK("build setup plan", time.Since(planStarted), plan["overall"])
+	}
 	if *write && !*dryRun {
 		if plan["overall"] == "blocked" {
 			message := "setup write blocked by current repository state"
 			plan["mode"] = "write"
 			plan["execution_status"] = "blocked"
+			if reporter != nil {
+				_ = reporter.Fail("write setup config", exitPolicyBlocked, 0, message)
+			}
 			if *jsonOut {
 				return printStatusJSON(withSetupError(plan, message), exitPolicyBlocked)
 			}
@@ -78,14 +102,24 @@ func setupWizard(configPath string, args []string) int {
 		}
 		cfg := plan["proposed_config"].(config)
 		rawDoc, _ := plan["raw_document"].(map[string]json.RawMessage)
+		writeStarted := time.Now()
+		if reporter != nil {
+			_ = reporter.Start("write setup config", plan["config_path"])
+		}
 		data, err := marshalConfigDocument(rawDoc, cfg)
 		if err != nil {
+			if reporter != nil {
+				_ = reporter.Fail("write setup config", exitInternal, time.Since(writeStarted), err.Error())
+			}
 			fmt.Fprintln(os.Stderr, err)
 			return exitInternal
 		}
 		path := plan["config_path"].(string)
 		writeResult, err := atomicWriteFile(path, data, fileExists(path))
 		if err != nil {
+			if reporter != nil {
+				_ = reporter.Fail("write setup config", exitInternal, time.Since(writeStarted), err.Error())
+			}
 			if *jsonOut {
 				plan["mode"] = "write"
 				plan["execution_status"] = "failed"
@@ -94,7 +128,17 @@ func setupWizard(configPath string, args []string) int {
 			fmt.Fprintln(os.Stderr, err)
 			return exitInternal
 		}
+		if reporter != nil {
+			_ = reporter.OK("write setup config", time.Since(writeStarted), path)
+		}
+		validateStarted := time.Now()
+		if reporter != nil {
+			_ = reporter.Start("validate setup config", path)
+		}
 		if _, _, err := loadConfig(path); err != nil {
+			if reporter != nil {
+				_ = reporter.Fail("validate setup config", exitInternal, time.Since(validateStarted), err.Error())
+			}
 			if *jsonOut {
 				plan["mode"] = "write"
 				plan["execution_status"] = "failed"
@@ -102,6 +146,9 @@ func setupWizard(configPath string, args []string) int {
 			}
 			fmt.Fprintln(os.Stderr, "post-write validation failed: "+err.Error())
 			return exitInternal
+		}
+		if reporter != nil {
+			_ = reporter.OK("validate setup config", time.Since(validateStarted), path)
 		}
 		plan = buildSetupPlan(configPath, *profile)
 		plan["mode"] = "write"
@@ -296,7 +343,11 @@ func gateNamesSlice(gates []gateConfig) []string {
 	return names
 }
 
-func runNonInteractiveSetupWizard(configPath, requestedProfile string, write bool, force bool, dryRun bool, gatesCSV string, installHooks bool, runDoctor bool, workflowMode string) int {
+func runNonInteractiveSetupWizard(configPath, requestedProfile string, write bool, force bool, dryRun bool, gatesCSV string, installHooks bool, runDoctor bool, workflowMode string, reporter *vigiloutput.StreamReporter) int {
+	planStarted := time.Now()
+	if reporter != nil {
+		_ = reporter.Start("prepare setup selections", configPath)
+	}
 	detected := detectSetupProfile()
 	profile := firstNonEmpty(requestedProfile, "auto")
 	if profile == "auto" {
@@ -317,16 +368,44 @@ func runNonInteractiveSetupWizard(configPath, requestedProfile string, write boo
 		RunDoctor:     runDoctor,
 		WorkflowMode:  workflowMode,
 	}
+	if reporter != nil {
+		_ = reporter.OK("prepare setup selections", time.Since(planStarted), profile)
+	}
 	renderSetupReview(answers, write && !dryRun)
 	if dryRun || !write {
+		if reporter != nil {
+			_ = reporter.Info("write setup config", "skipped preview mode")
+		}
 		fmt.Println()
 		fmt.Println("No files were written.")
 		return exitSuccess
 	}
+	writeStarted := time.Now()
+	if reporter != nil {
+		_ = reporter.Start("write setup config", answers.ConfigPath)
+	}
 	if code := writeSetupConfig(answers, force); code != 0 {
+		if reporter != nil {
+			_ = reporter.Fail("write setup config", code, time.Since(writeStarted), answers.ConfigPath)
+		}
 		return code
 	}
-	return finishSetupWizard(answers)
+	if reporter != nil {
+		_ = reporter.OK("write setup config", time.Since(writeStarted), answers.ConfigPath)
+	}
+	finishStarted := time.Now()
+	if reporter != nil {
+		_ = reporter.Start("run setup finishers", nil)
+	}
+	code := finishSetupWizard(answers)
+	if reporter != nil {
+		if code == exitSuccess {
+			_ = reporter.OK("run setup finishers", time.Since(finishStarted), "complete")
+		} else {
+			_ = reporter.Fail("run setup finishers", code, time.Since(finishStarted), "one or more finishers failed")
+		}
+	}
+	return code
 }
 
 func writeSetupConfig(answers setupWizardAnswers, force bool) int {

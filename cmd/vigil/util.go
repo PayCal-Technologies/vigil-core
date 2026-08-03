@@ -168,6 +168,30 @@ func statusLabel(status string) string {
 	return vigiloutput.StatusLabel(status, colorEnabled())
 }
 
+func commandStreamReporter(command, stream string, verbose bool, jsonOut bool) (*vigiloutput.StreamReporter, error) {
+	stream = strings.ToLower(strings.TrimSpace(stream))
+	if stream == "" && !verbose {
+		return nil, nil
+	}
+	if jsonOut {
+		return nil, fmt.Errorf("--stream/--verbose cannot be combined with --json")
+	}
+	format := vigiloutput.FormatText
+	switch stream {
+	case "", "text":
+	case "jsonl":
+		format = vigiloutput.FormatJSONL
+	default:
+		return nil, fmt.Errorf("--stream must be text or jsonl")
+	}
+	return vigiloutput.NewStreamReporter(vigiloutput.StreamOptions{
+		Writer:  os.Stderr,
+		Command: command,
+		Format:  format,
+		Verbose: verbose,
+	}), nil
+}
+
 func colorEnabled() bool {
 	if os.Getenv("NO_COLOR") != "" || os.Getenv("CI") != "" {
 		return false

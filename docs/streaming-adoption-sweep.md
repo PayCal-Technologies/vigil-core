@@ -1,14 +1,14 @@
 # Streaming Adoption Sweep
 
-This sweep tracks commands that can use `internal/output.StreamReporter` for extension-friendly phase status.
+This sweep tracks commands that can use `internal/output.StreamReporter` for extension-friendly phase status. Opt-in command phase streams write to stderr so stdout remains available for the command's normal result.
 
-## Should Adopt
+## Adopted
 
-- `setup` / `setup:wizard`: multi-step config write, hook install, doctor, and workflow dry-run phases should emit `phase_started`, `phase_finished`, and `phase_failed`.
-- `support:bundle`: bundle collection, redaction, manifest writing, and archive output are phase-oriented and useful for support operators.
-- `plugins:install`, `plugins:update`, `plugins:remove`, `plugins:trust-publisher`, and `plugins:index:verify`: acquisition, validation, trust, lockfile, and install phases should stream for plugin managers.
-- `config:migrate` and `config:repair`: parsing, migration, write, and post-write validation can stream without changing the final JSON envelope.
-- `release archive` helper: archive discovery, copy, manifest, and checksum phases should stream for release automation.
+- `setup` / `setup:wizard`: non-interactive setup now streams deterministic selection, config write, and finisher phases. Interactive setup intentionally rejects streaming to avoid interleaving prompts and status events.
+- `support:bundle`: bundle collection, Git status collection, bundle build, and output writing now stream phase status. `--dry-run` remains a JSON preview mode and rejects streaming to preserve parseable output.
+- `plugins:install`, `plugins:update`, `plugins:remove`, `plugins:trust-publisher`, `plugins:revoke-publisher`, and `plugins:index:verify`: layout, policy, index, acquisition, trust, lockfile, and install/remove phases now stream for plugin managers.
+- `config:migrate` and `config:repair`: parsing, default application, migration, write, and post-write validation now stream without changing normal command output.
+- `vigil-release-archive`: archive writes now stream phase status for release automation.
 
 ## Already Streams
 

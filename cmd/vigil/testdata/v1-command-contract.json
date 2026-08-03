@@ -744,6 +744,17 @@
         },
         {
           "long": "--write"
+        },
+        {
+          "long": "--stream",
+          "value_name": "FORMAT",
+          "values": [
+            "text",
+            "jsonl"
+          ]
+        },
+        {
+          "long": "--verbose"
         }
       ],
       "arguments": [],
@@ -782,6 +793,17 @@
         },
         {
           "long": "--yes"
+        },
+        {
+          "long": "--stream",
+          "value_name": "FORMAT",
+          "values": [
+            "text",
+            "jsonl"
+          ]
+        },
+        {
+          "long": "--verbose"
         }
       ],
       "arguments": [],
@@ -1601,6 +1623,17 @@
         },
         {
           "long": "--dry-run"
+        },
+        {
+          "long": "--stream",
+          "value_name": "FORMAT",
+          "values": [
+            "text",
+            "jsonl"
+          ]
+        },
+        {
+          "long": "--verbose"
         }
       ],
       "arguments": [],
@@ -2114,6 +2147,17 @@
           "long": "--index",
           "value_name": "SOURCE",
           "file": true
+        },
+        {
+          "long": "--stream",
+          "value_name": "FORMAT",
+          "values": [
+            "text",
+            "jsonl"
+          ]
+        },
+        {
+          "long": "--verbose"
         }
       ],
       "arguments": [],
@@ -2181,6 +2225,17 @@
         },
         {
           "long": "--restore-trust"
+        },
+        {
+          "long": "--stream",
+          "value_name": "FORMAT",
+          "values": [
+            "text",
+            "jsonl"
+          ]
+        },
+        {
+          "long": "--verbose"
         }
       ],
       "arguments": [],
@@ -2283,6 +2338,17 @@
         },
         {
           "long": "--keep-trust"
+        },
+        {
+          "long": "--stream",
+          "value_name": "FORMAT",
+          "values": [
+            "text",
+            "jsonl"
+          ]
+        },
+        {
+          "long": "--verbose"
         }
       ],
       "arguments": [
@@ -2320,6 +2386,17 @@
       "flags": [
         {
           "long": "--json"
+        },
+        {
+          "long": "--stream",
+          "value_name": "FORMAT",
+          "values": [
+            "text",
+            "jsonl"
+          ]
+        },
+        {
+          "long": "--verbose"
         }
       ],
       "arguments": [
@@ -2369,6 +2446,17 @@
         },
         {
           "long": "--restore-trust"
+        },
+        {
+          "long": "--stream",
+          "value_name": "FORMAT",
+          "values": [
+            "text",
+            "jsonl"
+          ]
+        },
+        {
+          "long": "--verbose"
         }
       ],
       "arguments": [],
@@ -2436,6 +2524,17 @@
         },
         {
           "long": "--restore-trust"
+        },
+        {
+          "long": "--stream",
+          "value_name": "FORMAT",
+          "values": [
+            "text",
+            "jsonl"
+          ]
+        },
+        {
+          "long": "--verbose"
         }
       ],
       "arguments": [],
@@ -2738,6 +2837,17 @@
         },
         {
           "long": "--dry-run"
+        },
+        {
+          "long": "--stream",
+          "value_name": "FORMAT",
+          "values": [
+            "text",
+            "jsonl"
+          ]
+        },
+        {
+          "long": "--verbose"
         }
       ],
       "arguments": [],
@@ -2801,6 +2911,17 @@
         },
         {
           "long": "--dry-run"
+        },
+        {
+          "long": "--stream",
+          "value_name": "FORMAT",
+          "values": [
+            "text",
+            "jsonl"
+          ]
+        },
+        {
+          "long": "--verbose"
         }
       ],
       "arguments": [],
@@ -2883,6 +3004,17 @@
           "long": "--output",
           "value_name": "PATH",
           "file": true
+        },
+        {
+          "long": "--stream",
+          "value_name": "FORMAT",
+          "values": [
+            "text",
+            "jsonl"
+          ]
+        },
+        {
+          "long": "--verbose"
         }
       ],
       "arguments": [],

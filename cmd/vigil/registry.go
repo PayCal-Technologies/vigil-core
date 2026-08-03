@@ -567,14 +567,20 @@ func commandFlagSpecs(command vigilcli.Command) []vigilcli.Flag {
 		add(vigilcli.Flag{Long: "--profile", Description: "Select the starter profile.", ValueName: "PROFILE", Values: profileNames()})
 	case "config:migrate":
 		add(vigilcli.Flag{Long: "--write", Description: "Write the migrated configuration."})
+		add(vigilcli.Flag{Long: "--stream", Description: "Stream phase status as text or JSONL.", ValueName: "FORMAT", Values: []string{"text", "jsonl"}})
+		add(vigilcli.Flag{Long: "--verbose", Description: "Stream additional phase details."})
 	case "config:repair":
 		add(vigilcli.Flag{Long: "--yes", Description: "Accept deterministic repair defaults."})
+		add(vigilcli.Flag{Long: "--stream", Description: "Stream phase status as text or JSONL.", ValueName: "FORMAT", Values: []string{"text", "jsonl"}})
+		add(vigilcli.Flag{Long: "--verbose", Description: "Stream additional phase details."})
 	case "init", "setup", "setup:wizard":
 		add(vigilcli.Flag{Long: "--profile", Description: "Select or override the detected profile.", ValueName: "PROFILE", Values: append([]string{"auto"}, profileNames()...)})
 		add(vigilcli.Flag{Long: "--write", Description: "Apply reviewed setup changes."})
 		add(vigilcli.Flag{Long: "--force", Description: "Replace an existing configuration after review."})
 		add(vigilcli.Flag{Long: "--yes", Description: "Accept deterministic setup defaults."})
 		add(vigilcli.Flag{Long: "--dry-run", Description: "Preview setup without writing."})
+		add(vigilcli.Flag{Long: "--stream", Description: "Stream phase status as text or JSONL in non-interactive setup.", ValueName: "FORMAT", Values: []string{"text", "jsonl"}})
+		add(vigilcli.Flag{Long: "--verbose", Description: "Stream additional phase details."})
 	case "hooks:install":
 		add(vigilcli.Flag{Long: "--dry-run", Description: "Preview hook changes."})
 		add(vigilcli.Flag{Long: "--chain", Description: "Preserve and chain existing hooks."})
@@ -585,6 +591,8 @@ func commandFlagSpecs(command vigilcli.Command) []vigilcli.Flag {
 		add(vigilcli.Flag{Long: "--include-config", Description: "Include complete redacted configuration."})
 		add(vigilcli.Flag{Long: "--include-git-status", Description: "Include redacted Git status."})
 		add(vigilcli.Flag{Long: "--output", Description: "Choose the bundle output path.", ValueName: "PATH", File: true})
+		add(vigilcli.Flag{Long: "--stream", Description: "Stream phase status as text or JSONL.", ValueName: "FORMAT", Values: []string{"text", "jsonl"}})
+		add(vigilcli.Flag{Long: "--verbose", Description: "Stream additional phase details."})
 	case "manpage", "manpage:generate":
 		add(vigilcli.Flag{Long: "--output", Description: "Write the manpage to a file.", ValueName: "PATH", File: true})
 	case "manpage:install":
@@ -601,6 +609,8 @@ func commandFlagSpecs(command vigilcli.Command) []vigilcli.Flag {
 		add(vigilcli.Flag{Long: "--approve", Description: "Approve one declared capability.", ValueName: "CAPABILITY", Repeatable: true})
 		add(vigilcli.Flag{Long: "--approve-all", Description: "Approve every declared capability."})
 		add(vigilcli.Flag{Long: "--restore-trust", Description: "Remove a matching local digest revocation."})
+		add(vigilcli.Flag{Long: "--stream", Description: "Stream phase status as text or JSONL.", ValueName: "FORMAT", Values: []string{"text", "jsonl"}})
+		add(vigilcli.Flag{Long: "--verbose", Description: "Stream additional phase details."})
 	case "plugins:conformance":
 		add(vigilcli.Flag{Long: "--file", Description: "Choose a local plugin executable.", ValueName: "PATH", File: true})
 		add(vigilcli.Flag{Long: "--execute", Description: "Exercise every declared command in an isolated temporary repository."})
@@ -608,12 +618,21 @@ func commandFlagSpecs(command vigilcli.Command) []vigilcli.Flag {
 	case "plugins:remove":
 		add(vigilcli.Flag{Long: "--version", Description: "Require an exact locked version.", ValueName: "VERSION"})
 		add(vigilcli.Flag{Long: "--keep-trust", Description: "Remove without revoking the digest."})
+		add(vigilcli.Flag{Long: "--stream", Description: "Stream phase status as text or JSONL.", ValueName: "FORMAT", Values: []string{"text", "jsonl"}})
+		add(vigilcli.Flag{Long: "--verbose", Description: "Stream additional phase details."})
 	case "plugins:index:verify":
 		add(vigilcli.Flag{Long: "--index", Description: "Choose a signed index path or HTTPS URL.", ValueName: "SOURCE", File: true})
+		add(vigilcli.Flag{Long: "--stream", Description: "Stream phase status as text or JSONL.", ValueName: "FORMAT", Values: []string{"text", "jsonl"}})
+		add(vigilcli.Flag{Long: "--verbose", Description: "Stream additional phase details."})
 	case "plugins:trust-publisher":
 		add(vigilcli.Flag{Long: "--key", Description: "Choose a base64 Ed25519 public key file.", ValueName: "PATH", File: true})
 		add(vigilcli.Flag{Long: "--name", Description: "Set the publisher display name.", ValueName: "NAME"})
 		add(vigilcli.Flag{Long: "--restore-trust", Description: "Remove a matching publisher-key revocation."})
+		add(vigilcli.Flag{Long: "--stream", Description: "Stream phase status as text or JSONL.", ValueName: "FORMAT", Values: []string{"text", "jsonl"}})
+		add(vigilcli.Flag{Long: "--verbose", Description: "Stream additional phase details."})
+	case "plugins:revoke-publisher":
+		add(vigilcli.Flag{Long: "--stream", Description: "Stream phase status as text or JSONL.", ValueName: "FORMAT", Values: []string{"text", "jsonl"}})
+		add(vigilcli.Flag{Long: "--verbose", Description: "Stream additional phase details."})
 	}
 	return flags
 }
