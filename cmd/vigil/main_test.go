@@ -1759,6 +1759,92 @@ func TestPlanOutputInsideRepositoryMustBeIgnored(t *testing.T) {
 	}
 }
 
+func TestSentryReviewDoesNotChangePlanID(t *testing.T) {
+	setupReviewedPlanFixture(t)
+	cfg, cfgPath, err := loadConfig("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Gates = []gateConfig{
+		{Name: "status", Command: "git", Args: []string{"status", "--short"}, ReadOnly: true},
+		{Name: "generate", Command: "true", ReadOnly: false},
+	}
+	document, err := buildWorkflowPlan(cfgPath, cfg.Gates, "", time.Minute, 1, time.Unix(100, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := document.PlanID
+	document.Review = sentryReview(map[string]bool{"generate": true}, document.Gates, time.Unix(200, 0))
+	if document.PlanID != original {
+		t.Fatalf("plan id changed after review: %s != %s", document.PlanID, original)
+	}
+	if err := vigilplan.Validate(document); err != nil {
+		t.Fatal(err)
+	}
+	nextID, err := vigilplan.ID(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nextID != original {
+		t.Fatalf("review changed computed plan id: %s != %s", nextID, original)
+	}
+	if missing := vigilplan.UnapprovedMutationGates(document); len(missing) != 0 {
+		t.Fatalf("unapproved mutations = %#v", missing)
+	}
+}
+
+func TestSentryApplyRequiresReviewedMutationApproval(t *testing.T) {
+	planPath := setupReviewedPlanFixture(t)
+	cfg, cfgPath, err := loadConfig("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Gates = []gateConfig{{Name: "generate", Command: "true", ReadOnly: false}}
+	writeJSONFile(t, defaultConfigName, cfg)
+	if out, code := runCommand("git", "add", defaultConfigName); code != 0 {
+		t.Fatalf("git add failed: %s", out)
+	}
+	if out, code := runCommand("git", "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "mutating gate"); code != 0 {
+		t.Fatalf("git commit failed: %s", out)
+	}
+	document, err := buildWorkflowPlan(cfgPath, cfg.Gates, "", time.Minute, 1, time.Unix(100, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(planPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := vigilplan.Write(planPath, document); err != nil {
+		t.Fatal(err)
+	}
+	output := captureStdout(t, func() {
+		if code := sentryApplyCommand(context.Background(), []string{"--json", planPath}, false); code != exitPolicyBlocked {
+			t.Fatalf("sentry apply exit = %d, want policy block", code)
+		}
+	})
+	var blocked struct {
+		Unapproved []string `json:"unapproved_gates"`
+	}
+	decodeEnvelopeData(t, []byte(output), &blocked)
+	if !containsString(blocked.Unapproved, "generate") {
+		t.Fatalf("unapproved gates = %#v", blocked.Unapproved)
+	}
+	document.Review = sentryReview(map[string]bool{"generate": true}, document.Gates, time.Unix(200, 0))
+	if err := vigilplan.Write(planPath, document); err != nil {
+		t.Fatal(err)
+	}
+	output = captureStdout(t, func() {
+		if code := sentryApplyCommand(context.Background(), []string{"--json", planPath}, false); code != exitSuccess {
+			t.Fatalf("sentry apply reviewed exit = %d", code)
+		}
+	})
+	var payload map[string]any
+	envelope := decodeEnvelopeData(t, []byte(output), &payload)
+	if envelope.ExitCode != exitSuccess {
+		t.Fatalf("envelope exit = %d", envelope.ExitCode)
+	}
+}
+
 func TestWorkflowMachineFormatAdaptersUseOneResultModel(t *testing.T) {
 	setupReviewedPlanFixture(t)
 

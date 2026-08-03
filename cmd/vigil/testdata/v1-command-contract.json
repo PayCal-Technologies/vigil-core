@@ -2767,6 +2767,170 @@
       "auto_enabled": false
     },
     {
+      "name": "sentry",
+      "aliases": [],
+      "access": "conditional-write",
+      "capabilities": [
+        "filesystem:read",
+        "filesystem:write",
+        "git:read",
+        "process",
+        "interactive"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--output",
+          "value_name": "PATH",
+          "file": true
+        },
+        {
+          "long": "--force"
+        },
+        {
+          "long": "--tag",
+          "value_name": "TAG"
+        },
+        {
+          "long": "--timeout",
+          "value_name": "DURATION"
+        },
+        {
+          "long": "--jobs",
+          "value_name": "N"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:sentry",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [
+        "git"
+      ],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": true,
+      "write_flags": [
+        "--output"
+      ],
+      "read_only_flags": [],
+      "usage": "vigil sentry [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "sentry:apply",
+      "aliases": [],
+      "access": "conditional-write",
+      "capabilities": [
+        "filesystem:read",
+        "filesystem:write",
+        "git:read",
+        "git:write",
+        "network",
+        "process",
+        "environment",
+        "secrets"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        },
+        {
+          "long": "--format",
+          "value_name": "FORMAT",
+          "values": [
+            "text",
+            "json",
+            "jsonl",
+            "junit",
+            "github"
+          ]
+        },
+        {
+          "long": "--artifacts"
+        },
+        {
+          "long": "--artifacts-dir",
+          "value_name": "PATH",
+          "file": true
+        }
+      ],
+      "arguments": [
+        {
+          "name": "PLAN_FILE",
+          "file": true,
+          "required": true
+        }
+      ],
+      "source": "core",
+      "binding": "builtin:sentry:apply",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "30m0s",
+      "network": "optional",
+      "required_tools": [
+        "git"
+      ],
+      "output_formats": [
+        "text",
+        "json",
+        "jsonl",
+        "junit",
+        "github"
+      ],
+      "interactive": false,
+      "write_flags": [
+        "--allow-mutation",
+        "--artifacts",
+        "--artifacts-dir"
+      ],
+      "read_only_flags": [],
+      "usage": "vigil sentry:apply [args]",
+      "auto_enabled": false
+    },
+    {
+      "name": "sentry:state",
+      "aliases": [],
+      "access": "read",
+      "capabilities": [
+        "filesystem:read",
+        "git:read",
+        "process"
+      ],
+      "args": "[args]",
+      "flags": [
+        {
+          "long": "--json"
+        }
+      ],
+      "arguments": [],
+      "source": "core",
+      "binding": "builtin:sentry:state",
+      "stability": "stable",
+      "host_api_version": "v1",
+      "timeout": "2m0s",
+      "network": "none",
+      "required_tools": [],
+      "output_formats": [
+        "text",
+        "json"
+      ],
+      "interactive": false,
+      "write_flags": [],
+      "read_only_flags": [],
+      "usage": "vigil sentry:state [args]",
+      "auto_enabled": false
+    },
+    {
       "name": "settings:show",
       "aliases": [],
       "access": "read",

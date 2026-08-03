@@ -48,6 +48,18 @@ type Document struct {
 	Inputs        Inputs        `json:"inputs"`
 	Options       Options       `json:"options"`
 	Gates         []config.Gate `json:"gates"`
+	Review        *Review       `json:"review,omitempty"`
+}
+
+type Review struct {
+	Mode              string             `json:"mode"`
+	ReviewedAt        string             `json:"reviewed_at"`
+	MutationApprovals []MutationApproval `json:"mutation_approvals,omitempty"`
+}
+
+type MutationApproval struct {
+	Gate    string `json:"gate"`
+	Command string `json:"command"`
 }
 
 type Mismatch struct {
@@ -116,6 +128,32 @@ func Validate(document Document) error {
 	if issues := config.GateIssues(document.Gates); len(issues) > 0 {
 		return errors.New("invalid plan gates: " + strings.Join(config.IssueMessages(issues), "; "))
 	}
+	if document.Review != nil {
+		if strings.TrimSpace(document.Review.Mode) == "" {
+			return errors.New("plan review mode is required")
+		}
+		if _, err := time.Parse(time.RFC3339Nano, document.Review.ReviewedAt); err != nil {
+			return fmt.Errorf("invalid plan review reviewed_at: %w", err)
+		}
+		gateNames := map[string]bool{}
+		for _, gate := range document.Gates {
+			gateNames[gate.Name] = true
+		}
+		seenApprovals := map[string]bool{}
+		for _, approval := range document.Review.MutationApprovals {
+			name := strings.TrimSpace(approval.Gate)
+			if name == "" {
+				return errors.New("plan review mutation approval gate is required")
+			}
+			if !gateNames[name] {
+				return fmt.Errorf("plan review mutation approval references unknown gate %q", name)
+			}
+			if seenApprovals[name] {
+				return fmt.Errorf("plan review mutation approval duplicates gate %q", name)
+			}
+			seenApprovals[name] = true
+		}
+	}
 	expectedID, err := ID(document)
 	if err != nil {
 		return err
@@ -128,11 +166,36 @@ func Validate(document Document) error {
 
 func ID(document Document) (string, error) {
 	document.PlanID = ""
+	document.Review = nil
 	data, err := json.Marshal(document)
 	if err != nil {
 		return "", err
 	}
 	return DigestBytes(data), nil
+}
+
+func ApprovedMutationGates(document Document) map[string]bool {
+	approved := map[string]bool{}
+	if document.Review == nil {
+		return approved
+	}
+	for _, approval := range document.Review.MutationApprovals {
+		approved[strings.TrimSpace(approval.Gate)] = true
+	}
+	return approved
+}
+
+func UnapprovedMutationGates(document Document) []string {
+	approved := ApprovedMutationGates(document)
+	var missing []string
+	for _, gate := range document.Gates {
+		if gate.ReadOnly || approved[gate.Name] {
+			continue
+		}
+		missing = append(missing, gate.Name)
+	}
+	sort.Strings(missing)
+	return missing
 }
 
 func Compare(expected, actual Inputs) []Mismatch {

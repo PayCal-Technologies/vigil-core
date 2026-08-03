@@ -137,13 +137,13 @@ func runGateBatch(
 	if len(batch) > 1 && !allReadOnly {
 		return nil, fmt.Errorf("mutating gates cannot execute concurrently")
 	}
-	if !allReadOnly && !allowMutation {
+	if !allReadOnly && !allowMutation && !batchMutationApproved(document, batch) {
 		for batchIndex, gateIndex := range batch {
 			result := newGateResult(gateIndex, document.Gates[gateIndex])
 			result.Status = "fail"
 			result.State = string(runner.StateBlocked)
 			result.ExitCode = vigilcli.ExitPolicyBlocked
-			result.Output = "mutation confirmation required for mutating check; generate a plan and apply it with --allow-mutation"
+			result.Output = "mutation approval required for mutating check; use --allow-mutation or apply a Sentry-reviewed plan"
 			results[batchIndex] = result
 		}
 		return results, nil
@@ -236,6 +236,17 @@ func runGateBatch(
 		results[index].Output = appendResultOutput(results[index].Output, message)
 	}
 	return results, nil
+}
+
+func batchMutationApproved(document vigilplan.Document, batch []int) bool {
+	approved := vigilplan.ApprovedMutationGates(document)
+	for _, gateIndex := range batch {
+		gate := document.Gates[gateIndex]
+		if !gate.ReadOnly && !approved[gate.Name] {
+			return false
+		}
+	}
+	return true
 }
 
 func runOneGate(

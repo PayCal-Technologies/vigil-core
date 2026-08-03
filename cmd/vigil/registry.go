@@ -156,6 +156,15 @@ func coreCommandSpecs() []vigilcli.Command {
 		command("apply", "Core", "Verify and execute an unchanged reviewed plan.", vigilcli.AccessWrite, workflowCapabilities, func(inv vigilcli.Invocation) int {
 			return applyPlanCommand(inv.Context, inv.Args, inv.AllowMutation)
 		}),
+		command("sentry", "Core", "Interactively review a workflow plan in Sentry Mode.", vigilcli.AccessConditionalWrite, append(planCapabilities, vigilcli.CapabilityInteractive), func(inv vigilcli.Invocation) int {
+			return sentryCommand(inv.ConfigPath, inv.Args, inv.AllowMutation)
+		}),
+		command("sentry:apply", "Core", "Execute a Sentry-reviewed workflow plan.", vigilcli.AccessConditionalWrite, workflowCapabilities, func(inv vigilcli.Invocation) int {
+			return sentryApplyCommand(inv.Context, inv.Args, inv.AllowMutation)
+		}),
+		command("sentry:state", "Core", "Print an agent-readable Sentry safety state.", vigilcli.AccessRead, process, func(inv vigilcli.Invocation) int {
+			return sentryStateCommand(inv.Context, inv.ConfigPath, inv.Args)
+		}),
 		command("explain", "Core", "Explain a command's source, access, and usage.", vigilcli.AccessRead, fsRead, func(inv vigilcli.Invocation) int {
 			return explain(inv.Args)
 		}),
@@ -310,6 +319,15 @@ func coreCommandSpecs() []vigilcli.Command {
 			commands[i].Network = "optional"
 		case "plan":
 			commands[i].WriteFlags = []string{"--output"}
+			commands[i].RequiredTools = []string{"git"}
+		case "sentry":
+			commands[i].WriteFlags = []string{"--output"}
+			commands[i].RequiredTools = []string{"git"}
+			commands[i].Interactive = true
+		case "sentry:apply":
+			commands[i].WriteFlags = []string{"--allow-mutation", "--artifacts", "--artifacts-dir"}
+			commands[i].Timeout = 30 * time.Minute
+			commands[i].Network = "optional"
 			commands[i].RequiredTools = []string{"git"}
 		case "apply":
 			commands[i].Timeout = 30 * time.Minute
@@ -521,8 +539,10 @@ func commandOutputFormats(name string) []string {
 		return []string{"roff"}
 	case "hooks:install", "hooks:pre-commit", "hooks:pre-push", "manpage:install":
 		return []string{"text"}
-	case "workflow:local", "apply":
+	case "workflow:local", "apply", "sentry:apply":
 		return []string{"text", "json", "jsonl", "junit", "github"}
+	case "sentry:state":
+		return []string{"text", "json"}
 	case "doctor", "verify":
 		return []string{"text", "json", "jsonl", "junit", "github"}
 	case "checks:staged-sensitive", "checks:workspace-hygiene", "checks:tracked-assistant-artifacts", "checks:public-assumptions", "checks:public-parity":
@@ -549,7 +569,16 @@ func commandFlagSpecs(command vigilcli.Command) []vigilcli.Flag {
 		add(vigilcli.Flag{Long: "--tag", Description: "Include gates matching a tag.", ValueName: "TAG"})
 		add(vigilcli.Flag{Long: "--timeout", Description: "Set the default gate timeout.", ValueName: "DURATION"})
 		add(vigilcli.Flag{Long: "--jobs", Description: "Bound explicit parallel groups.", ValueName: "N"})
+	case "sentry":
+		add(vigilcli.Flag{Long: "--output", Description: "Write the Sentry-reviewed plan.", ValueName: "PATH", File: true})
+		add(vigilcli.Flag{Long: "--force", Description: "Replace an existing Sentry plan after review."})
+		add(vigilcli.Flag{Long: "--tag", Description: "Include gates matching a tag.", ValueName: "TAG"})
+		add(vigilcli.Flag{Long: "--timeout", Description: "Set the default gate timeout.", ValueName: "DURATION"})
+		add(vigilcli.Flag{Long: "--jobs", Description: "Bound explicit parallel groups.", ValueName: "N"})
 	case "apply":
+		add(vigilcli.Flag{Long: "--artifacts", Description: "Write private run artifacts."})
+		add(vigilcli.Flag{Long: "--artifacts-dir", Description: "Choose the private artifact root.", ValueName: "PATH", File: true})
+	case "sentry:apply":
 		add(vigilcli.Flag{Long: "--artifacts", Description: "Write private run artifacts."})
 		add(vigilcli.Flag{Long: "--artifacts-dir", Description: "Choose the private artifact root.", ValueName: "PATH", File: true})
 	case "workflow:local":
@@ -643,6 +672,8 @@ func commandArgumentSpecs(name string) []vigilcli.Argument {
 		return []vigilcli.Argument{{Name: "COMMAND", Description: "Registered command name.", Required: true}}
 	case "apply":
 		return []vigilcli.Argument{{Name: "PLAN_FILE", Description: "Reviewed Vigil plan file.", File: true, Required: true}}
+	case "sentry:apply":
+		return []vigilcli.Argument{{Name: "PLAN_FILE", Description: "Sentry-reviewed Vigil plan file.", File: true, Required: true}}
 	case "completion":
 		return []vigilcli.Argument{{Name: "SHELL", Description: "Target shell.", Values: []string{"bash", "zsh", "fish"}, Required: true}}
 	case "plugins:remove":
